@@ -1,6 +1,7 @@
 package assembly
 
 import (
+	"errors"
 	"reflect"
 
 	"github.com/yamakiller/magicNet/handler/implement"
@@ -32,4 +33,11 @@ func (slf *RPCServer) getRPCMethod(name string) interface{} {
 		return nil
 	}
 	return f
+}
+
+func (slf *RPCServer) RegisterRPCMethod(name string, method interface{}) error {
+	if reflect.ValueOf(method).Type().Kind() != reflect.Func {
+		return errors.New("need method is function")
+	}
+	slf._rpcs[name] = method
 }
