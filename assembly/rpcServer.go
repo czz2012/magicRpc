@@ -40,4 +40,5 @@ func (slf *RPCServer) RegisterRPCMethod(name string, method interface{}) error {
 		return errors.New("need method is function")
 	}
 	slf._rpcs[name] = method
+	return nil
 }
