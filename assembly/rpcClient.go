@@ -22,5 +22,5 @@ func (slf *rpcTarget) GetAddr() string {
 
 //RPCClient doc
 type RPCClient struct {
-	implement.NetConnectService
+	implement.NetConnector
 }
