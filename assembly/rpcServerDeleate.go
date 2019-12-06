@@ -1,13 +1,13 @@
 package assembly
 
 import (
+	"encoding/binary"
 	"reflect"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/yamakiller/magicNet/engine/actor"
 	"github.com/yamakiller/magicNet/handler/implement"
 	"github.com/yamakiller/magicRpc/code"
-	"github.com/yamakiller/magicRpc/protocol"
 )
 
 type rpcServerDeleate struct {
@@ -20,6 +20,9 @@ type rpcServerDeleate struct {
 //@Param implement.INetClient client interface
 //@Return error
 func (slf *rpcServerDeleate) Handshake(c implement.INetClient) error {
+	x := make([]byte, 4)
+	binary.BigEndian.PutUint32(x, constHandShakeCode)
+	c.(*RPCSrvClient).Write(x, len(x))
 	return nil
 }
 
@@ -33,7 +36,7 @@ func (slf *rpcServerDeleate) Handshake(c implement.INetClient) error {
 func (slf *rpcServerDeleate) Decode(context actor.Context,
 	nets *implement.NetListenService,
 	c implement.INetClient) error {
-	block, err := protocol.Decode(c.GetRecvBuffer())
+	block, err := Decode(c.GetRecvBuffer())
 	if err != nil {
 		if err == code.ErrIncompleteData {
 			return implement.ErrAnalysisProceed
@@ -56,10 +59,10 @@ func (slf *rpcServerDeleate) Decode(context actor.Context,
 		return err
 	}
 
-	if block.Oper == protocol.RPCRequest {
-		actor.DefaultSchedulerContext.Send((c.(*RPCServClient)).GetPID(), &requestEvent{method, data, block.Ser})
+	if block.Oper == RPCRequest {
+		actor.DefaultSchedulerContext.Send((c.(*RPCSrvClient)).GetPID(), &requestEvent{method, data, block.Ser})
 	} else {
-		actor.DefaultSchedulerContext.Send((c.(*RPCServClient)).GetPID(), &responseEvent{})
+		actor.DefaultSchedulerContext.Send((c.(*RPCSrvClient)).GetPID(), &responseEvent{})
 	}
 
 	return implement.ErrAnalysisSuccess

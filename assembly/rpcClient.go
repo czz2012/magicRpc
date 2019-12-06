@@ -1,6 +1,8 @@
 package assembly
 
-//包含连接池功能
+import "github.com/yamakiller/magicNet/handler"
 
+//RPCClient doc
 type RPCClient struct {
+	handler.Service
 }

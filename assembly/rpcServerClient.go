@@ -7,13 +7,12 @@ import (
 	"github.com/yamakiller/magicNet/engine/actor"
 	"github.com/yamakiller/magicNet/handler/implement"
 	"github.com/yamakiller/magicNet/network"
-	"github.com/yamakiller/magicRpc/protocol"
 )
 
-//RPCServClient doc
+//RPCSrvClient doc
 //@Summary
 //@Inherit  implement.NetClientService
-type RPCServClient struct {
+type RPCSrvClient struct {
 	implement.NetClientService
 	_parent *RPCServer
 	_handle uint64
@@ -24,7 +23,7 @@ type RPCServClient struct {
 //Initial doc
 //@Summary initialize rpc server client
 //@Method Initial
-func (slf *RPCServClient) Initial() {
+func (slf *RPCSrvClient) Initial() {
 	slf.NetClientService.Initial()
 	slf.RegisterMethod(&requestEvent{}, slf.onRequest)
 	slf.RegisterMethod(&responseEvent{}, slf.onResponse)
@@ -34,7 +33,7 @@ func (slf *RPCServClient) Initial() {
 //@Summary with parent server
 //@Method WithParent
 //@Param *RPCServer parent server
-func (slf *RPCServClient) WithParent(srv *RPCServer) {
+func (slf *RPCSrvClient) WithParent(srv *RPCServer) {
 	slf._parent = srv
 }
 
@@ -42,7 +41,7 @@ func (slf *RPCServClient) WithParent(srv *RPCServer) {
 //@Summary Setting the client ID
 //@Method  SetID desc
 //@Param  (uint64) id
-func (slf *RPCServClient) SetID(v uint64) {
+func (slf *RPCSrvClient) SetID(v uint64) {
 	slf._handle = v
 }
 
@@ -50,7 +49,7 @@ func (slf *RPCServClient) SetID(v uint64) {
 //@Summary Returns the client ID
 //@Method GetID
 //@Return (uint64) return current  rpc server client handle
-func (slf *RPCServClient) GetID() uint64 {
+func (slf *RPCSrvClient) GetID() uint64 {
 	return slf._handle
 }
 
@@ -58,7 +57,7 @@ func (slf *RPCServClient) GetID() uint64 {
 //@Summary Returns the gateway client socket
 //@Method GetSocket
 //@Return Returns the gateway client socket
-func (slf *RPCServClient) GetSocket() int32 {
+func (slf *RPCSrvClient) GetSocket() int32 {
 	return slf._socket
 }
 
@@ -66,7 +65,7 @@ func (slf *RPCServClient) GetSocket() int32 {
 //@Summary Setting the gateway client socket
 //@Method  SetSocket
 //@Param   (int32) a socket id
-func (slf *RPCServClient) SetSocket(sock int32) {
+func (slf *RPCSrvClient) SetSocket(sock int32) {
 	slf._socket = sock
 }
 
@@ -75,7 +74,7 @@ func (slf *RPCServClient) SetSocket(sock int32) {
 //@Method  Write
 //@Param  ([]byte) a need send data
 //@Param  (int) need send data length
-func (slf *RPCServClient) Write(d []byte, len int) {
+func (slf *RPCSrvClient) Write(d []byte, len int) {
 	sock := slf.GetSocket()
 	if sock <= 0 {
 		slf.LogError("Write Data error:socket[0]")
@@ -91,7 +90,7 @@ func (slf *RPCServClient) Write(d []byte, len int) {
 //@Summary Setting the time for authentication
 //@Method SetAuth desc: Setting author time
 //@Param (uint64) a author time
-func (slf *RPCServClient) SetAuth(auth uint64) {
+func (slf *RPCSrvClient) SetAuth(auth uint64) {
 
 }
 
@@ -99,7 +98,7 @@ func (slf *RPCServClient) SetAuth(auth uint64) {
 //@Summary Returns the client author time
 //@Method GetAuth
 //@Return (uint64) the client author time
-func (slf *RPCServClient) GetAuth() uint64 {
+func (slf *RPCSrvClient) GetAuth() uint64 {
 	return 0
 }
 
@@ -107,14 +106,14 @@ func (slf *RPCServClient) GetAuth() uint64 {
 //@Summary Returns the client key pairs
 //@Method GetKeyPair
 //@Return (interface{}) the client key pairs
-func (slf *RPCServClient) GetKeyPair() interface{} {
+func (slf *RPCSrvClient) GetKeyPair() interface{} {
 	return nil
 }
 
 //BuildKeyPair doc
 //@Summary Building the client key pairs
 //@Method BuildKeyPair
-func (slf *RPCServClient) BuildKeyPair() {
+func (slf *RPCSrvClient) BuildKeyPair() {
 
 }
 
@@ -122,19 +121,19 @@ func (slf *RPCServClient) BuildKeyPair() {
 //@Summary Returns the client public key
 //@Method GetKeyPublic
 //@Return (string) a public key
-func (slf *RPCServClient) GetKeyPublic() string {
+func (slf *RPCSrvClient) GetKeyPublic() string {
 	return ""
 }
 
 //Shutdown doc
 //@Summary Terminate this client
 //@Method Shutdown
-func (slf *RPCServClient) Shutdown() {
+func (slf *RPCSrvClient) Shutdown() {
 	slf.NetClientService.Shutdown()
 	slf._parent = nil
 }
 
-func (slf *RPCServClient) onRequest(context actor.Context, sender *actor.PID, message interface{}) {
+func (slf *RPCSrvClient) onRequest(context actor.Context, sender *actor.PID, message interface{}) {
 	request := message.(*requestEvent)
 	method := reflect.ValueOf(request._method)
 	params := make([]reflect.Value, 1)
@@ -148,23 +147,13 @@ func (slf *RPCServClient) onRequest(context actor.Context, sender *actor.PID, me
 			slf.LogError("RPC Response error:%d-%+v", request._ser, err)
 			return
 		}
-		data = protocol.Encode(1, "", request._ser, protocol.RPCResponse, slf._parent._messageName(rs[0].Type()), data)
+		data = Encode(1, "", request._ser, RPCResponse, slf._parent._messageName(rs[0].Type()), data)
 		slf.Write(data, len(data))
 		return
 	}
 	return
 }
 
-func (slf *RPCServClient) onResponse(context actor.Context, sender *actor.PID, message interface{}) {
+func (slf *RPCSrvClient) onResponse(context actor.Context, sender *actor.PID, message interface{}) {
 
-}
-
-func (slf *RPCServClient) response(pbName string, pb proto.Message, ser uint32) {
-	data, err := proto.Marshal(pb)
-	if err != nil {
-		slf.LogError("RPC Response error:%d-%+v", ser, err)
-		return
-	}
-	data = protocol.Encode(1, "", ser, protocol.RPCResponse, pbName, data)
-	slf.Write(data, len(data))
 }

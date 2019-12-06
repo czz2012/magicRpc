@@ -35,6 +35,11 @@ func (slf *RPCServer) getRPCMethod(name string) interface{} {
 	return f
 }
 
+//RegisterRPCMethod doc
+//@Summary register rpc method function
+//@Param string is method name
+//@Param interface{} method
+//@Return error
 func (slf *RPCServer) RegisterRPCMethod(name string, method interface{}) error {
 	if reflect.ValueOf(method).Type().Kind() != reflect.Func {
 		return errors.New("need method is function")

@@ -1,4 +1,4 @@
-package protocol
+package assembly
 
 import (
 	"bytes"
@@ -63,6 +63,8 @@ const (
 	constSerialShift = constDataNameLengthShift - constSerialSize
 	//rpc name length limit
 	constNameLimit = 65
+	//rpc handshake code
+	constHandShakeCode uint32 = 0xbf109
 )
 
 //Header data header

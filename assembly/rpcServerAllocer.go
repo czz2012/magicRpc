@@ -14,6 +14,7 @@ import (
 //@Member int client receive buffer size of max
 type RPCServClientAllocer struct {
 	_clientReceive int
+	_parent        *RPCServer
 	_pool          *sync.Pool
 }
 
@@ -23,7 +24,7 @@ type RPCServClientAllocer struct {
 func (slf *RPCServClientAllocer) Initial() {
 	slf._pool = &sync.Pool{
 		New: func() interface{} {
-			c := new(RPCServClient)
+			c := new(RPCSrvClient)
 			c.GetRecvBuffer().Grow(slf._clientReceive)
 			return c
 		},
@@ -36,7 +37,8 @@ func (slf *RPCServClientAllocer) Initial() {
 //@Return (implement.INetClient) a client
 func (slf *RPCServClientAllocer) New() implement.INetClient {
 	c := handler.Spawn("rpc", func() handler.IService {
-		h := slf._pool.Get().(*RPCServClient)
+		h := slf._pool.Get().(*RPCSrvClient)
+		h._parent = slf._parent
 		h.GetRecvBuffer().Reset()
 		h.Initial()
 		return h

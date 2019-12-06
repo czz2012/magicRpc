@@ -13,7 +13,8 @@ const (
 	constIDShift = 5
 )
 
-type RPCServerManage struct {
+//RPCSrvManage doc
+type RPCSrvManage struct {
 	implement.NetClientManager
 	_id        int
 	_handles   map[uint64]implement.INetClient
@@ -27,7 +28,7 @@ type RPCServerManage struct {
 //Initial doc
 //@Summary initialization rpc server client manage
 //@Method Initial
-func (slf *RPCServerManage) Initial() {
+func (slf *RPCSrvManage) Initial() {
 	slf._handles = make(map[uint64]implement.INetClient)
 	slf._sockets = make(map[int32]implement.INetClient)
 	workerID := int((slf._id >> constIDShift) & constIDMask)
@@ -41,7 +42,7 @@ func (slf *RPCServerManage) Initial() {
 //@Param (implement.INetClient) a client object
 //@Return (uint64) a resouse id
 //@Return (error) error informat
-func (slf *RPCServerManage) Occupy(c implement.INetClient) (uint64, error) {
+func (slf *RPCSrvManage) Occupy(c implement.INetClient) (uint64, error) {
 	slf._sync.Lock()
 	defer slf._sync.Unlock()
 
@@ -71,7 +72,7 @@ func (slf *RPCServerManage) Occupy(c implement.INetClient) (uint64, error) {
 //@Method Grap
 //@Param (uint64) a client (Handle/ID)
 //@Return (implement.INetClient) a client
-func (slf *RPCServerManage) Grap(h uint64) implement.INetClient {
+func (slf *RPCSrvManage) Grap(h uint64) implement.INetClient {
 	slf._sync.Lock()
 	defer slf._sync.Unlock()
 
@@ -88,7 +89,7 @@ func (slf *RPCServerManage) Grap(h uint64) implement.INetClient {
 //@Method GrapSocket desc
 //@Param (int32) a socket id
 //@Return (implement.INetClient) a client
-func (slf *RPCServerManage) GrapSocket(sock int32) implement.INetClient {
+func (slf *RPCSrvManage) GrapSocket(sock int32) implement.INetClient {
 	slf._sync.Lock()
 	defer slf._sync.Unlock()
 
@@ -104,7 +105,7 @@ func (slf *RPCServerManage) GrapSocket(sock int32) implement.INetClient {
 //@Summary remove client
 //@Method Erase
 //@Param (uint64) a client is (Handle/ID)
-func (slf *RPCServerManage) Erase(h uint64) {
+func (slf *RPCSrvManage) Erase(h uint64) {
 	slf._sync.Lock()
 	defer slf._sync.Unlock()
 
@@ -132,7 +133,7 @@ func (slf *RPCServerManage) Erase(h uint64) {
 //@Summary release client grap
 //@Method Release
 //@Param implement.INetClient a client
-func (slf *RPCServerManage) Release(c implement.INetClient) {
+func (slf *RPCSrvManage) Release(c implement.INetClient) {
 	slf._sync.Lock()
 	defer slf._sync.Unlock()
 
@@ -145,7 +146,7 @@ func (slf *RPCServerManage) Release(c implement.INetClient) {
 //@Summary Return client number
 //@Method Size
 //@Return int
-func (slf *RPCServerManage) Size() int {
+func (slf *RPCSrvManage) Size() int {
 	slf._sync.Lock()
 	defer slf._sync.Unlock()
 	return slf._sz
@@ -155,7 +156,7 @@ func (slf *RPCServerManage) Size() int {
 //@Summary return client handles
 //@Method GetHandles
 //@Return ([]uint64) all client of (Handle/ID)
-func (slf *RPCServerManage) GetHandles() []uint64 {
+func (slf *RPCSrvManage) GetHandles() []uint64 {
 	slf._sync.Lock()
 	defer slf._sync.Unlock()
 
