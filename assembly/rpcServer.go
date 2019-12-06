@@ -12,7 +12,7 @@ import (
 //@Struct RPCServer
 //@Inherit implement.NetListenService
 type RPCServer struct {
-	implement.NetListenService
+	implement.NetListener
 
 	_rpcs        map[string]interface{}
 	_messageType func(name string) reflect.Type
@@ -24,7 +24,7 @@ type RPCServer struct {
 //@Method Initial
 func (slf *RPCServer) Initial() {
 	slf._rpcs = make(map[string]interface{})
-	slf.NetListenService.Initial()
+	slf.NetListener.Initial()
 }
 
 func (slf *RPCServer) getRPCMethod(name string) interface{} {

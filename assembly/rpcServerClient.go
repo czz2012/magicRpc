@@ -13,7 +13,7 @@ import (
 //@Summary
 //@Inherit  implement.NetClientService
 type RPCSrvClient struct {
-	implement.NetClientService
+	implement.NetSrvClient
 	_parent *RPCServer
 	_handle uint64
 	_socket int32
@@ -24,7 +24,7 @@ type RPCSrvClient struct {
 //@Summary initialize rpc server client
 //@Method Initial
 func (slf *RPCSrvClient) Initial() {
-	slf.NetClientService.Initial()
+	slf.NetSrvClient.Initial()
 	slf.RegisterMethod(&requestEvent{}, slf.onRequest)
 	slf.RegisterMethod(&responseEvent{}, slf.onResponse)
 }
@@ -129,7 +129,7 @@ func (slf *RPCSrvClient) GetKeyPublic() string {
 //@Summary Terminate this client
 //@Method Shutdown
 func (slf *RPCSrvClient) Shutdown() {
-	slf.NetClientService.Shutdown()
+	slf.NetSrvClient.Shutdown()
 	slf._parent = nil
 }
 

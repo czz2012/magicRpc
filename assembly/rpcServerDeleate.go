@@ -34,7 +34,7 @@ func (slf *rpcServerDeleate) Handshake(c implement.INetClient) error {
 //@Param implement.INetClient client
 //@Return error
 func (slf *rpcServerDeleate) Decode(context actor.Context,
-	nets *implement.NetListenService,
+	nets *implement.NetListener,
 	c implement.INetClient) error {
 	block, err := Decode(c.GetRecvBuffer())
 	if err != nil {
