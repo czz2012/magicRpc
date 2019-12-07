@@ -64,7 +64,7 @@ const (
 	//rpc name length limit
 	constNameLimit = 65
 	//rpc handshake code
-	constHandShakeCode uint32 = 0xbf109
+	constHandShakeCode uint8 = 0xbf
 )
 
 //Header data header

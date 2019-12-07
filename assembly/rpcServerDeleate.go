@@ -1,7 +1,6 @@
 package assembly
 
 import (
-	"encoding/binary"
 	"reflect"
 
 	"github.com/gogo/protobuf/proto"
@@ -20,9 +19,8 @@ type rpcServerDeleate struct {
 //@Param implement.INetClient client interface
 //@Return error
 func (slf *rpcServerDeleate) Handshake(c implement.INetClient) error {
-	x := make([]byte, 4)
-	binary.BigEndian.PutUint32(x, constHandShakeCode)
-	c.(*RPCSrvClient).Write(x, len(x))
+	x := constHandShakeCode
+	c.(*RPCSrvClient).Write(x, 1)
 	return nil
 }
 
