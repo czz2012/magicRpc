@@ -1,10 +1,10 @@
-package assembly
+package codec
 
 import (
-	"bytes"
 	"encoding/binary"
 	"unicode/utf8"
 
+	"github.com/yamakiller/magicNet/handler/net"
 	"github.com/yamakiller/magicRpc/code"
 )
 
@@ -132,16 +132,16 @@ func getSerial(d uint64) uint32 {
 //@Param  *bytes.Buffer   recvice data buffer
 //@Return *Block network data block
 //@Return error
-func Decode(data *bytes.Buffer) (*Block, error) {
-	if data.Len() < constHeadByte {
+func Decode(data net.INetClient) (*Block, error) {
+	if data.GetBufferLen() < constHeadByte {
 		return nil, code.ErrIncompleteData
 	}
 
-	tmpHeader := binary.BigEndian.Uint64(data.Bytes()[:constHeadByte])
+	tmpHeader := binary.BigEndian.Uint64(data.GetBufferBytes()[:constHeadByte])
 	tmpDataLength := getDataLength(tmpHeader)
 	tmpMethodNameLength := getMethodLength(tmpHeader)
 	tmpDataNameLength := getDataNameLength(tmpHeader)
-	if data.Len() < (constHeadByte + tmpDataLength + tmpMethodNameLength + tmpDataNameLength) {
+	if data.GetBufferLen() < (constHeadByte + tmpDataLength + tmpMethodNameLength + tmpDataNameLength) {
 		return nil, code.ErrIncompleteData
 	}
 
@@ -149,18 +149,18 @@ func Decode(data *bytes.Buffer) (*Block, error) {
 		return nil, code.ErrMethodName
 	}
 
-	if (constHeadByte + tmpDataLength + tmpMethodNameLength + tmpDataNameLength) > (data.Cap() << 1) {
+	if (constHeadByte + tmpDataLength + tmpMethodNameLength + tmpDataNameLength) > (data.GetBufferCap() << 1) {
 		return nil, code.ErrDataOverflow
 	}
 
-	data.Truncate(constHeadByte)
+	data.TrunBuffer(constHeadByte)
 
 	result := &Block{Ver: getVersion(tmpHeader),
 		Oper:   RPCOper(getOper(tmpHeader)),
-		Method: string(data.Next(tmpMethodNameLength)),
-		DName:  string(data.Next(tmpDataNameLength)),
+		Method: string(data.ReadBuffer(tmpMethodNameLength)),
+		DName:  string(data.ReadBuffer(tmpDataNameLength)),
 		Ser:    getSerial(tmpHeader),
-		Data:   data.Next(tmpDataLength)}
+		Data:   data.ReadBuffer(tmpDataLength)}
 
 	return result, nil
 }
