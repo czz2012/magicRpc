@@ -1,4 +1,4 @@
-package server
+package client
 
 import "github.com/gogo/protobuf/proto"
 
@@ -9,8 +9,8 @@ type requestEvent struct {
 	_ser        uint32
 }
 
-/*type responseEvent struct {
+type responseEvent struct {
 	_methodName string
 	_return     proto.Message
 	_ser        uint32
-}*/
+}

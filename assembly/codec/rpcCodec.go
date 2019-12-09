@@ -132,7 +132,7 @@ func getSerial(d uint64) uint32 {
 //@Param  *bytes.Buffer   recvice data buffer
 //@Return *Block network data block
 //@Return error
-func Decode(data net.INetClient) (*Block, error) {
+func Decode(data net.INetReceiveBuffer) (*Block, error) {
 	if data.GetBufferLen() < constHeadByte {
 		return nil, code.ErrIncompleteData
 	}

@@ -11,6 +11,8 @@ var (
 	ErrDataOverflow = errors.New("Data overflow")
 	//ErrMethodUndefined error
 	ErrMethodUndefined = errors.New("RPC method undefined")
+	//ErrMethodDefinedResponse error
+	ErrMethodDefinedResponse = errors.New("RPC method defined Request need Response")
 	//ErrParamUndefined error
 	ErrParamUndefined = errors.New("RPC param undefined")
 	//ErrConnectFull error
