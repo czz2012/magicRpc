@@ -15,6 +15,8 @@ var (
 	ErrMethodDefinedResponse = errors.New("RPC method defined Request need Response")
 	//ErrParamUndefined error
 	ErrParamUndefined = errors.New("RPC param undefined")
+	//ErrConnectPoolUp error
+	ErrConnectPoolUp = errors.New("Connection pool up")
 	//ErrConnectFull error
 	ErrConnectFull = errors.New("Connection is full")
 )

@@ -63,8 +63,11 @@ const (
 	constSerialShift = constDataNameLengthShift - constSerialSize
 	//rpc name length limit
 	constNameLimit = 65
+)
+
+const (
 	//rpc handshake code
-	constHandShakeCode uint8 = 0xbf
+	ConstHandShakeCode = 0xBF
 )
 
 //Header data header

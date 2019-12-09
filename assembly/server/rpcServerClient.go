@@ -17,20 +17,14 @@ import (
 type RPCSrvClient struct {
 	client.NetSSrvCleint
 	_handle uint64
-	//_response     chan proto.Message
-	//_responseStop chan bool
-	//_responseWait bool
 }
 
 //Initial doc
 //@Summary Initial rpc server accesser
 //@Method Initial
 func (slf *RPCSrvClient) Initial() {
-	//slf._response = make(chan proto.Message)
-	//slf._responseStop = make(chan bool, 1)
 	slf.NetSSrvCleint.Initial()
 	slf.RegisterMethod(&requestEvent{}, slf.onRequest)
-	//slf.RegisterMethod(&responseEvent{}, slf.onResponse)
 }
 
 //SetID doc

@@ -187,7 +187,7 @@ func (slf *RPCServer) rpcClosed(id uint64) error {
 
 func (slf *RPCServer) rpcAccept(c net.INetClient) error {
 	x := make([]byte, 1)
-	x[0] = 0xBF
+	x[0] = codec.ConstHandShakeCode
 	if err := c.(*RPCSrvClient).SendTo(x); err != nil {
 		return err
 	}
@@ -218,12 +218,12 @@ func (slf *RPCServer) rpcDecode(ontext actor.Context, params ...interface{}) err
 		return code.ErrMethodDefinedResponse
 	}
 
-	dataType := proto.MessageType(block.DName)
-	if dataType == nil {
+	dt := proto.MessageType(block.DName)
+	if dt == nil {
 		return code.ErrParamUndefined
 	}
 
-	data := reflect.New(dataType.Elem()).Interface().(proto.Message)
+	data := reflect.New(dt.Elem()).Interface().(proto.Message)
 	if err := proto.Unmarshal(block.Data, data); err != nil {
 		return err
 	}
