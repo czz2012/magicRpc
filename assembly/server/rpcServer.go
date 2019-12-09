@@ -50,12 +50,6 @@ func rpcDecode(ontext actor.Context, params ...interface{}) error {
 	return net.ErrAnalysisSuccess
 }
 
-func rpcAccept(c net.INetClient) error {
-	x := make([]byte, 1)
-	x[0] = 0xBF
-	return c.(*RPCSrvClient).SendTo(x)
-}
-
 //Options RPC Server Options
 type Options struct {
 	Name         string
@@ -67,6 +61,8 @@ type Options struct {
 
 	AsyncError    func(error)
 	AsyncComplete func(int32)
+	AsyncClosed   func(uint64)
+	AsyncAccept   func(uint64)
 }
 
 // Option is a function on the options for a rpc listen.
@@ -88,7 +84,7 @@ func SetID(id int) Option {
 	}
 }
 
-//SetClientCap setting accesser cap option
+//SetClientCap Set accesser cap option
 func SetClientCap(cap int) Option {
 	return func(o *Options) error {
 		o.Cap = cap
@@ -96,7 +92,7 @@ func SetClientCap(cap int) Option {
 	}
 }
 
-//SetClientKeepTime setting client keep time millsecond option
+//SetClientKeepTime Set client keep time millsecond option
 func SetClientKeepTime(tm int) Option {
 	return func(o *Options) error {
 		o.KeepTime = tm
@@ -104,7 +100,7 @@ func SetClientKeepTime(tm int) Option {
 	}
 }
 
-//SetClientBufferLimit setting client buffer limit option
+//SetClientBufferLimit Set client buffer limit option
 func SetClientBufferLimit(limit int) Option {
 	return func(o *Options) error {
 		o.BufferLimit = limit
@@ -112,7 +108,7 @@ func SetClientBufferLimit(limit int) Option {
 	}
 }
 
-//SetClientOutSize setting client recvice call chan size option
+//SetClientOutSize Set client recvice call chan size option
 func SetClientOutSize(outSize int) Option {
 	return func(o *Options) error {
 		o.OutCChanSize = outSize
@@ -120,7 +116,7 @@ func SetClientOutSize(outSize int) Option {
 	}
 }
 
-//SetAsyncError setting listen fail Async Error callback option
+//SetAsyncError Set Listen fail Async Error callback option
 func SetAsyncError(f func(error)) Option {
 	return func(o *Options) error {
 		o.AsyncError = f
@@ -128,10 +124,26 @@ func SetAsyncError(f func(error)) Option {
 	}
 }
 
-//SetAsyncComplete setting listen async success callback option
+//SetAsyncAccept Set Listen client accept Async callback
+func SetAsyncAccept(f func(uint64)) Option {
+	return func(o *Options) error {
+		o.AsyncAccept = f
+		return nil
+	}
+}
+
+//SetAsyncComplete Set Listen async success callback option
 func SetAsyncComplete(f func(int32)) Option {
 	return func(o *Options) error {
 		o.AsyncComplete = f
+		return nil
+	}
+}
+
+//SetAsyncClosed Set Listen closed async callback
+func SetAsyncClosed(f func(uint64)) Option {
+	return func(o *Options) error {
+		o.AsyncClosed = f
 		return nil
 	}
 }
@@ -161,9 +173,10 @@ func New(options ...Option) (*RPCServer, error) {
 	}
 
 	rpc := &RPCServer{_rpcs: make(map[string]interface{})}
+	rpc._asyncAccept = opts.AsyncAccept
+	rpc._asyncClosed = opts.AsyncClosed
 	handler.Spawn(opts.Name, func() handler.IService {
 		group := &RPCSrvGroup{_id: opts.ServerID, _bfSize: opts.BufferLimit, _cap: opts.Cap}
-		group.Initial()
 
 		h, err := listener.Spawn(
 			listener.SetListener(&net.TCPListen{}),
@@ -171,7 +184,8 @@ func New(options ...Option) (*RPCServer, error) {
 			listener.SetClientKeepTime(opts.KeepTime),
 			listener.SetClientOutChanSize(opts.OutCChanSize),
 			listener.SetAsyncComplete(opts.AsyncComplete),
-			listener.SetAsyncAccept(rpcAccept),
+			listener.SetAsyncAccept(rpc.rpcAccept),
+			listener.SetAsyncClose(rpc.rpcClosed),
 			listener.SetClientGroups(group),
 			listener.SetClientDecoder(rpcDecode))
 
@@ -194,18 +208,31 @@ func New(options ...Option) (*RPCServer, error) {
 //@
 //@Member map[string]interface{}  RPC Function map table
 type RPCServer struct {
-	_listen *listener.NetListener
-	_rpcs   map[string]interface{}
+	_listen      *listener.NetListener
+	_rpcs        map[string]interface{}
+	_asyncAccept func(uint64)
+	_asyncClosed func(uint64)
 }
 
-/*//Initial doc
-//@Summary 初始化RPC服务
-//@Method Initial
-//@Return error
-func (slf *RPCServer) Initial() {
-	slf._rpcs = make(map[string]interface{})
-	slf._listen.Initial()
-}*/
+func (slf *RPCServer) rpcClosed(id uint64) error {
+	if slf._asyncAccept != nil {
+		slf._asyncAccept(id)
+	}
+	return nil
+}
+
+func (slf *RPCServer) rpcAccept(c net.INetClient) error {
+	x := make([]byte, 1)
+	x[0] = 0xBF
+	if err := c.(*RPCSrvClient).SendTo(x); err != nil {
+		return err
+	}
+
+	if slf._asyncAccept != nil {
+		slf._asyncAccept(c.GetID())
+	}
+	return nil
+}
 
 func (slf *RPCServer) getRPC(name string) interface{} {
 	f, ok := slf._rpcs[name]
