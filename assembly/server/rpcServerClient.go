@@ -7,6 +7,7 @@ import (
 	"github.com/yamakiller/magicNet/engine/actor"
 	"github.com/yamakiller/magicNet/handler/implement/client"
 	"github.com/yamakiller/magicRpc/assembly/codec"
+	"github.com/yamakiller/magicRpc/assembly/common"
 )
 
 //RPCSrvClient doc
@@ -93,9 +94,13 @@ func (slf *RPCSrvClient) CallWait(method string, param interface{}) (interface{}
 
 func (slf *RPCSrvClient) onRequest(context actor.Context, sender *actor.PID, message interface{}) {
 	request := message.(*requestEvent)
-	method := reflect.ValueOf(request._method)
-	params := make([]reflect.Value, 1)
-	params[0] = reflect.ValueOf(request._param)
+	methodName := common.MethodSplit(request._methodName)
+	method := reflect.ValueOf(request._method).MethodByName(methodName[1])
+	var params []reflect.Value
+	if request._param != nil {
+		params = make([]reflect.Value, 1)
+		params[0] = reflect.ValueOf(request._param)
+	}
 
 	rs := method.Call(params)
 	if len(rs) > 0 {

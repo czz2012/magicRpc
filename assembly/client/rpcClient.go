@@ -2,7 +2,9 @@ package client
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
+	"sync/atomic"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
@@ -11,6 +13,7 @@ import (
 	"github.com/yamakiller/magicNet/handler/net"
 	"github.com/yamakiller/magicNet/timer"
 	"github.com/yamakiller/magicRpc/assembly/codec"
+	"github.com/yamakiller/magicRpc/assembly/common"
 	"github.com/yamakiller/magicRpc/code"
 )
 
@@ -23,7 +26,7 @@ type RPCClient struct {
 	_timeOut      int64
 	_idletime     int64
 	_serial       uint32
-	_response     chan proto.Message
+	_response     chan *responseEvent
 	_responseStop chan bool
 	_responseWait uint32
 }
@@ -32,13 +35,18 @@ type RPCClient struct {
 //@Summary Initial RPC Client service initial
 //@Method Initial
 func (slf *RPCClient) Initial() {
-	slf._response = make(chan proto.Message)
+	slf._response = make(chan *responseEvent)
 	slf._responseStop = make(chan bool, 1)
 	slf.NetConnector.Initial()
 	slf.RegisterMethod(&requestEvent{}, slf.onRequest)
 	slf.RegisterMethod(&responseEvent{}, slf.onResponse)
 }
 
+//Connection doc
+//@Summary Connection address
+//@Method  Connection
+//@Param   string address
+//@Return  error
 func (slf *RPCClient) Connection(addr string) error {
 	startTime := time.Now().UnixNano()
 	if err := slf.NetConnector.Connection(addr); err != nil {
@@ -52,8 +60,10 @@ func (slf *RPCClient) Connection(addr string) error {
 		}
 
 		if slf._connTimeout > 0 {
-			if (time.Now().UnixNano() - startTime) > slf._connTimeout {
-				slf.Shutdown() //?
+			currTime := time.Now().UnixNano() - startTime
+			if (currTime / int64(time.Millisecond)) > slf._connTimeout {
+				fmt.Println("time out")
+				slf.Shutdown()
 				return errors.New("RPC Connection time out")
 			}
 		}
@@ -68,17 +78,32 @@ func (slf *RPCClient) Connection(addr string) error {
 }
 
 //Call doc
+//@Summary Call remote function
+//@Param   string  			method
+//@Param   interface{}  	param
+//@Return  error
 func (slf *RPCClient) Call(method string, param interface{}) error {
-	data, err := proto.Marshal(param.(proto.Message))
-	if err != nil {
-		return err
+	var data []byte
+	var err error
+	var dataName string
+	if param != nil {
+		data, err = proto.Marshal(param.(proto.Message))
+		if err != nil {
+			return err
+		}
+		dataName = proto.MessageName(param.(proto.Message))
 	}
 
-	data = codec.Encode(1, method, 0, codec.RPCRequest, proto.MessageName(param.(proto.Message)), data)
+	data = codec.Encode(1, method, 0, codec.RPCRequest, dataName, data)
 	return slf.SendTo(data)
 }
 
 //CallWait doc
+//@Summary Call wait remote function
+//@Param   string 	 	method
+//@Param   interface{}  param
+//@Return  interface{}
+//@Return  error
 func (slf *RPCClient) CallWait(method string, param interface{}) (interface{}, error) {
 	if slf._responseWait != 0 {
 		return nil, errors.New("call waitting")
@@ -100,21 +125,31 @@ func (slf *RPCClient) CallWait(method string, param interface{}) (interface{}, e
 		select {
 		case isStop := <-slf._responseStop:
 			if isStop {
-				slf._responseWait = 0
+				atomic.StoreUint32(&slf._responseWait, 0)
 				return nil, errors.New("client close")
 			}
 		case result := <-slf._response:
-			slf._responseWait = 0
-			return result, nil
+			if atomic.CompareAndSwapUint32(&slf._responseWait, result._ser, 0) {
+				return result._return, nil
+			}
+
+			continue
+		case <-time.After(time.Duration(slf._timeOut) * time.Millisecond):
+			atomic.StoreUint32(&slf._responseWait, 0)
+			return nil, errors.New("time out")
 		}
 	}
 }
 
 func (slf *RPCClient) onRequest(context actor.Context, sender *actor.PID, message interface{}) {
 	request := message.(*requestEvent)
-	method := reflect.ValueOf(request._method)
-	params := make([]reflect.Value, 1)
-	params[0] = reflect.ValueOf(request._param)
+	methodName := common.MethodSplit(request._methodName)
+	method := reflect.ValueOf(request._method).MethodByName(methodName[1])
+	var params []reflect.Value
+	if request._param != nil {
+		params := make([]reflect.Value, 1)
+		params[0] = reflect.ValueOf(request._param)
+	}
 
 	rs := method.Call(params)
 	if len(rs) > 0 {
@@ -144,17 +179,16 @@ func (slf *RPCClient) onResponse(context actor.Context, sender *actor.PID, messa
 	select {
 	case isStop := <-slf._responseStop:
 		if isStop {
-			slf._responseWait = 0
+			atomic.StoreUint32(&slf._responseWait, 0)
 			slf.LogError("client closed")
 			return
 		}
-	case slf._response <- response._return:
+	case slf._response <- response:
 	}
 }
 
 func (slf *RPCClient) rpcDecode(context actor.Context, params ...interface{}) error {
 	c := params[0].(*connector.NetConnector)
-
 	if slf._auth == 0 {
 		tmpAuth := c.ReadBuffer(1)
 		if tmpAuth[0] != codec.ConstHandShakeCode {
@@ -170,23 +204,36 @@ func (slf *RPCClient) rpcDecode(context actor.Context, params ...interface{}) er
 		}
 		return err
 	}
-	method := slf._parent.getRPC(block.Method)
-	if method == nil {
-		return code.ErrMethodUndefined
+
+	var methodName []string
+	var methodObj interface{}
+	if block.Oper == codec.RPCRequest {
+		methodName = common.MethodSplit(block.Method)
+		methodObj = slf._parent.getRPC(methodName[0])
+		if methodObj == nil || len(methodName) != 2 {
+			return code.ErrMethodUndefined
+		}
+
+		if !reflect.ValueOf(methodObj).MethodByName(methodName[1]).IsValid() {
+			return code.ErrMethodUndefined
+		}
 	}
 
-	dt := proto.MessageType(block.DName)
-	if dt == nil {
-		return code.ErrParamUndefined
-	}
+	var data proto.Message
+	if block.DName != "" {
+		dt := proto.MessageType(block.DName)
+		if dt == nil {
+			return code.ErrParamUndefined
+		}
 
-	data := reflect.New(dt.Elem()).Interface().(proto.Message)
-	if err := proto.Unmarshal(block.Data, data); err != nil {
-		return err
+		data = reflect.New(dt.Elem()).Interface().(proto.Message)
+		if err := proto.Unmarshal(block.Data, data); err != nil {
+			return err
+		}
 	}
 
 	if block.Oper == codec.RPCRequest {
-		actor.DefaultSchedulerContext.Send(context.Self(), &requestEvent{block.Method, method.Method, data, block.Ser})
+		actor.DefaultSchedulerContext.Send(context.Self(), &requestEvent{block.Method, methodObj, data, block.Ser})
 	} else {
 		actor.DefaultSchedulerContext.Send(context.Self(), &responseEvent{block.Method, data, block.Ser})
 	}

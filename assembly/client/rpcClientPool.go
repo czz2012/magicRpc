@@ -12,11 +12,19 @@ import (
 	"github.com/yamakiller/magicNet/handler/implement/connector"
 	"github.com/yamakiller/magicNet/handler/net"
 
-	"github.com/yamakiller/magicRpc/assembly/codec"
-	"github.com/yamakiller/magicRpc/assembly/method"
 	"github.com/yamakiller/magicRpc/code"
 )
 
+//Options doc
+//@Summary
+//@Method string address
+//@Method int    receive buffer size
+//@Method int    receive event chan size
+//@Method int    socket connection time out/millsecond
+//@Method int    operation time out/millsecond
+//@Method int    connection idle max of number
+//@Method int    connection max of number
+//@Method int    connection idle time out
 type Options struct {
 	Addr          string
 	BufferLimit   int
@@ -28,13 +36,14 @@ type Options struct {
 	IdleTimeout   int64
 }
 
+//Option param
 type Option func(*Options) error
 
 var (
 	defaultOptions = Options{BufferLimit: 8196, OutChanSize: 32, Timeout: 1000 * 1000, SocketTimeout: 1000 * 60, Idle: 1, Active: 1, IdleTimeout: 1000 * 120}
 )
 
-// Set Socket Handle
+// SetAddr Set Socket Handle
 func SetAddr(addr string) Option {
 	return func(o *Options) error {
 		o.Addr = addr
@@ -42,6 +51,7 @@ func SetAddr(addr string) Option {
 	}
 }
 
+//SetBufferLimit Set Connection Receive Buffer size
 func SetBufferLimit(limit int) Option {
 	return func(o *Options) error {
 		o.BufferLimit = limit
@@ -49,6 +59,7 @@ func SetBufferLimit(limit int) Option {
 	}
 }
 
+//SetTimeout Set Connection operation time out/millsecond
 func SetTimeout(tm int64) Option {
 	return func(o *Options) error {
 		o.Timeout = tm
@@ -56,6 +67,7 @@ func SetTimeout(tm int64) Option {
 	}
 }
 
+//SetSocketTimeout Set Connection connect time out/millsecond
 func SetSocketTimeout(tm int64) Option {
 	return func(o *Options) error {
 		o.SocketTimeout = tm
@@ -63,6 +75,7 @@ func SetSocketTimeout(tm int64) Option {
 	}
 }
 
+//SetOutChanSize Set Connection receive chan size
 func SetOutChanSize(n int) Option {
 	return func(o *Options) error {
 		o.OutChanSize = n
@@ -70,6 +83,7 @@ func SetOutChanSize(n int) Option {
 	}
 }
 
+//SetIdle Set Connection pool idle max of number
 func SetIdle(n int) Option {
 	return func(o *Options) error {
 		o.Idle = n
@@ -77,6 +91,7 @@ func SetIdle(n int) Option {
 	}
 }
 
+//SetActive Set Connection pool max of number
 func SetActive(n int) Option {
 	return func(o *Options) error {
 		o.Active = n
@@ -84,6 +99,7 @@ func SetActive(n int) Option {
 	}
 }
 
+//SetIdleTimeout Set Connection pool connection idle time out
 func SetIdleTimeout(tm int64) Option {
 	return func(o *Options) error {
 		o.IdleTimeout = tm
@@ -91,6 +107,9 @@ func SetIdleTimeout(tm int64) Option {
 	}
 }
 
+//New doc
+//@Summary new RPC connection pool
+//@Param  ...Option
 func New(options ...Option) (*RPCClientPool, error) {
 
 	c := &RPCClientPool{_opts: defaultOptions}
@@ -119,6 +138,7 @@ func New(options ...Option) (*RPCClientPool, error) {
 				err = e
 				return nil
 			}
+
 			rpc._parent = c
 			rpc._timeOut = c._opts.Timeout
 			rpc._connTimeout = c._opts.SocketTimeout
@@ -169,10 +189,14 @@ type RPCClientPool struct {
 	_sz         int
 	_isShutdown bool
 	_wait       sync.WaitGroup
-	_rpcs       map[string]*method.RPCMethod
+	_rpcs       map[string]interface{}
 	_sync       sync.Mutex
 }
 
+//Call doc
+//@Summary Call Remote function non-return
+//@Param   string  method name
+//@Param   interface param
 func (slf *RPCClientPool) Call(method string, param interface{}) error {
 	h := slf.getPool()
 	if h == nil {
@@ -183,6 +207,7 @@ func (slf *RPCClientPool) Call(method string, param interface{}) error {
 	return h._c.Call(method, param)
 }
 
+//CallWait doc
 func (slf *RPCClientPool) CallWait(method string, param interface{}) (interface{}, error) {
 	h := slf.getPool()
 	if h == nil {
@@ -193,6 +218,7 @@ func (slf *RPCClientPool) CallWait(method string, param interface{}) (interface{
 	return h._c.CallWait(method, param)
 }
 
+//Shutdown shutdown Client pools
 func (slf *RPCClientPool) Shutdown() {
 	slf._isShutdown = true
 	slf._wait.Wait()
@@ -291,7 +317,7 @@ func (slf *RPCClientPool) guard() {
 	}
 }
 
-func (slf *RPCClientPool) getRPC(name string) *method.RPCMethod {
+func (slf *RPCClientPool) getRPC(name string) interface{} {
 	f, ok := slf._rpcs[name]
 	if !ok {
 		return nil
@@ -305,10 +331,11 @@ func (slf *RPCClientPool) getRPC(name string) *method.RPCMethod {
 //@Param  string function name
 //@Param  interface{} function
 //@Return error
-func (slf *RPCClientPool) RegRPC(oper codec.RPCOper, met interface{}) error {
-	if reflect.ValueOf(met).Type().Kind() != reflect.Func {
-		return errors.New("need method is function")
+func (slf *RPCClientPool) RegRPC(met interface{}) error {
+	if reflect.ValueOf(met).Type().Kind() != reflect.Ptr {
+		return errors.New("need object")
 	}
-	slf._rpcs[reflect.TypeOf(met).Name()] = &method.RPCMethod{Method: met, Oper: oper}
+
+	slf._rpcs[reflect.TypeOf(met).Elem().Name()] = met
 	return nil
 }

@@ -1,7 +1,9 @@
 package server
 
 import (
+	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/yamakiller/magicLibs/util"
 	"github.com/yamakiller/magicNet/handler"
@@ -22,6 +24,7 @@ const (
 type RPCSrvClientAllocer struct {
 	_parent *RPCSrvGroup
 	_pool   *sync.Pool
+	_sn     uint32
 }
 
 //Initial doc
@@ -38,11 +41,14 @@ func (slf *RPCSrvClientAllocer) Initial() {
 }
 
 //New doc
-//@Summary 分配一个新的RPC访问者对象
+//@Summary Allocate a new RPC visitor object
 //@Method New
 //@Return net.INetClient 新的一个RPC访问者对象
 func (slf *RPCSrvClientAllocer) New() net.INetClient {
-	c := handler.Spawn("rpc", func() handler.IService {
+	c := handler.Spawn(fmt.Sprintf("rpc/client/%d/%d",
+		slf._parent._id,
+		atomic.AddUint32(&slf._sn, 1)), func() handler.IService {
+
 		h := slf._pool.Get().(*RPCSrvClient)
 		h.ClearBuffer()
 		h.Initial()
@@ -84,6 +90,7 @@ func (slf *RPCSrvGroup) Initial() {
 	workerID := int((slf._id >> constIDShift) & constIDMask)
 	subWorkerID := (slf._id & constIDMask)
 	slf._snowflake = util.NewSnowFlake(int64(workerID), int64(subWorkerID))
+	slf._allocer.Initial()
 }
 
 //Allocer doc

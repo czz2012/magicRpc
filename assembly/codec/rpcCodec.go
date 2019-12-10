@@ -2,6 +2,7 @@ package codec
 
 import (
 	"encoding/binary"
+	"fmt"
 	"unicode/utf8"
 
 	"github.com/yamakiller/magicNet/handler/net"
@@ -140,10 +141,13 @@ func Decode(data net.INetReceiveBuffer) (*Block, error) {
 		return nil, code.ErrIncompleteData
 	}
 
+	fmt.Println(data.GetBufferLen())
+
 	tmpHeader := binary.BigEndian.Uint64(data.GetBufferBytes()[:constHeadByte])
 	tmpDataLength := getDataLength(tmpHeader)
 	tmpMethodNameLength := getMethodLength(tmpHeader)
 	tmpDataNameLength := getDataNameLength(tmpHeader)
+	fmt.Println(tmpMethodNameLength, ",", tmpDataNameLength)
 	if data.GetBufferLen() < (constHeadByte + tmpDataLength + tmpMethodNameLength + tmpDataNameLength) {
 		return nil, code.ErrIncompleteData
 	}
@@ -165,6 +169,8 @@ func Decode(data net.INetReceiveBuffer) (*Block, error) {
 		Ser:    getSerial(tmpHeader),
 		Data:   data.ReadBuffer(tmpDataLength)}
 
+	fmt.Println(result.Method)
+
 	return result, nil
 }
 
@@ -181,10 +187,14 @@ func Decode(data net.INetReceiveBuffer) (*Block, error) {
 func Encode(ver int, methodName string, ser uint32, oper RPCOper, dataName string, data []byte) []byte {
 	tmpMethodNameLength := utf8.RuneCountInString(methodName)
 	tmpDataNameLength := utf8.RuneCountInString(dataName)
+	tmpDataLength := 0
+	if data != nil {
+		tmpDataLength = len(data)
+	}
 	tmpData := make([]byte, constHeadByte)
 	tmpHeader := ((uint64(ver) & constVersionMask) << constVersionShift) |
 		((uint64(oper) & constOperMask) << constOperShift) |
-		((uint64(len(data)) & constDataLengthMask) << constDataLengthShift) |
+		((uint64(tmpDataLength) & constDataLengthMask) << constDataLengthShift) |
 		((uint64(tmpMethodNameLength) & constMethodNameLengthMask) << constMethodNameLengthShift) |
 		((uint64(tmpDataNameLength) & constDataNameLengthMask) << constDataNameLengthShift) |
 		(uint64(ser) & constSerialMask)
@@ -192,7 +202,9 @@ func Encode(ver int, methodName string, ser uint32, oper RPCOper, dataName strin
 	binary.BigEndian.PutUint64(tmpData, tmpHeader)
 
 	tmpData = append(tmpData, []byte(methodName)...)
-	tmpData = append(tmpData, data...)
+	if data != nil {
+		tmpData = append(tmpData, data...)
+	}
 
 	return tmpData
 }

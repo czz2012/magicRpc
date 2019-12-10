@@ -10,7 +10,7 @@ import (
 	"github.com/yamakiller/magicNet/handler/implement/listener"
 	"github.com/yamakiller/magicNet/handler/net"
 	"github.com/yamakiller/magicRpc/assembly/codec"
-	"github.com/yamakiller/magicRpc/assembly/method"
+	"github.com/yamakiller/magicRpc/assembly/common"
 	"github.com/yamakiller/magicRpc/code"
 )
 
@@ -136,7 +136,7 @@ func New(options ...Option) (*RPCServer, error) {
 		}
 	}
 
-	rpc := &RPCServer{_rpcs: make(map[string]*method.RPCMethod)}
+	rpc := &RPCServer{_rpcs: make(map[string]interface{})}
 	rpc._asyncAccept = opts.AsyncAccept
 	rpc._asyncClosed = opts.AsyncClosed
 	handler.Spawn(opts.Name, func() handler.IService {
@@ -156,10 +156,8 @@ func New(options ...Option) (*RPCServer, error) {
 		if err != nil {
 			return nil
 		}
-
 		rpc._listen = h
 		rpc._listen.Initial()
-
 		return rpc._listen
 	})
 
@@ -173,14 +171,33 @@ func New(options ...Option) (*RPCServer, error) {
 //@Member map[string]interface{}  RPC Function map table
 type RPCServer struct {
 	_listen      *listener.NetListener
-	_rpcs        map[string]*method.RPCMethod
+	_rpcs        map[string]interface{}
 	_asyncAccept func(uint64)
 	_asyncClosed func(uint64)
 }
 
+//Listen doc
+//@Summary RPC Server Listen
+//@Param   string Listen address [ip:port]
+//@Return  error
+func (slf *RPCServer) Listen(addr string) error {
+	return slf._listen.Listen(addr)
+}
+
+//Shutdown doc
+//@Summary RPC Server shutdown
+func (slf *RPCServer) Shutdown() {
+	if slf._listen != nil {
+		slf._listen.Shutdown()
+		slf._listen = nil
+	}
+
+	slf._rpcs = nil
+}
+
 func (slf *RPCServer) rpcClosed(id uint64) error {
-	if slf._asyncAccept != nil {
-		slf._asyncAccept(id)
+	if slf._asyncClosed != nil {
+		slf._asyncClosed(id)
 	}
 	return nil
 }
@@ -199,7 +216,6 @@ func (slf *RPCServer) rpcAccept(c net.INetClient) error {
 }
 
 func (slf *RPCServer) rpcDecode(ontext actor.Context, params ...interface{}) error {
-	//s := params[0].(*listener.NetListener)
 	c := params[1].(net.INetClient)
 	block, err := codec.Decode(c)
 	if err != nil {
@@ -209,34 +225,34 @@ func (slf *RPCServer) rpcDecode(ontext actor.Context, params ...interface{}) err
 		return err
 	}
 
-	method := slf.getRPC(block.Method)
-	if method == nil {
+	methodName := common.MethodSplit(block.Method)
+	methodObj := slf.getRPC(methodName[0])
+	if methodObj == nil || len(methodName) != 2 {
 		return code.ErrMethodUndefined
 	}
 
-	if block.Oper == codec.RPCRequest && method.Oper != codec.RPCResponse {
-		return code.ErrMethodDefinedResponse
+	if !reflect.ValueOf(methodObj).MethodByName(methodName[1]).IsValid() {
+		return code.ErrMethodUndefined
 	}
 
-	dt := proto.MessageType(block.DName)
-	if dt == nil {
-		return code.ErrParamUndefined
+	var data proto.Message
+	if block.DName != "" {
+		dt := proto.MessageType(block.DName)
+		if dt == nil {
+			return code.ErrParamUndefined
+		}
+
+		data = reflect.New(dt.Elem()).Interface().(proto.Message)
+		if err := proto.Unmarshal(block.Data, data); err != nil {
+			return err
+		}
 	}
 
-	data := reflect.New(dt.Elem()).Interface().(proto.Message)
-	if err := proto.Unmarshal(block.Data, data); err != nil {
-		return err
-	}
-
-	if block.Oper != codec.RPCRequest {
-		return errors.New("Received a non-Request application")
-	}
-
-	actor.DefaultSchedulerContext.Send((c.(*RPCSrvClient)).GetPID(), &requestEvent{block.Method, method.Method, data, block.Ser})
+	actor.DefaultSchedulerContext.Send((c.(*RPCSrvClient)).GetPID(), &requestEvent{block.Method, methodObj, data, block.Ser})
 	return net.ErrAnalysisSuccess
 }
 
-func (slf *RPCServer) getRPC(name string) *method.RPCMethod {
+func (slf *RPCServer) getRPC(name string) interface{} {
 	f, ok := slf._rpcs[name]
 	if !ok {
 		return nil
@@ -248,13 +264,12 @@ func (slf *RPCServer) getRPC(name string) *method.RPCMethod {
 //RegRPC doc
 //@Summary Register RPC Accesser function
 //@Method RegRPC
-//@Param  codec.RPCOper function is request/response
 //@Param  interface{} function
 //@Return error
-func (slf *RPCServer) RegRPC(oper codec.RPCOper, met interface{}) error {
-	if reflect.ValueOf(met).Type().Kind() != reflect.Func {
-		return errors.New("need method is function")
+func (slf *RPCServer) RegRPC(met interface{}) error {
+	if reflect.ValueOf(met).Type().Kind() != reflect.Ptr {
+		return errors.New("need object")
 	}
-	slf._rpcs[reflect.TypeOf(met).Name()] = &method.RPCMethod{Method: met, Oper: oper}
+	slf._rpcs[reflect.TypeOf(met).Elem().Name()] = met
 	return nil
 }
