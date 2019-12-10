@@ -2,7 +2,6 @@ package codec
 
 import (
 	"encoding/binary"
-	"fmt"
 	"unicode/utf8"
 
 	"github.com/yamakiller/magicNet/handler/net"
@@ -141,13 +140,11 @@ func Decode(data net.INetReceiveBuffer) (*Block, error) {
 		return nil, code.ErrIncompleteData
 	}
 
-	fmt.Println(data.GetBufferLen())
-
 	tmpHeader := binary.BigEndian.Uint64(data.GetBufferBytes()[:constHeadByte])
 	tmpDataLength := getDataLength(tmpHeader)
 	tmpMethodNameLength := getMethodLength(tmpHeader)
 	tmpDataNameLength := getDataNameLength(tmpHeader)
-	fmt.Println(tmpMethodNameLength, ",", tmpDataNameLength)
+
 	if data.GetBufferLen() < (constHeadByte + tmpDataLength + tmpMethodNameLength + tmpDataNameLength) {
 		return nil, code.ErrIncompleteData
 	}
@@ -168,8 +165,6 @@ func Decode(data net.INetReceiveBuffer) (*Block, error) {
 		DName:  string(data.ReadBuffer(tmpDataNameLength)),
 		Ser:    getSerial(tmpHeader),
 		Data:   data.ReadBuffer(tmpDataLength)}
-
-	fmt.Println(result.Method)
 
 	return result, nil
 }
