@@ -42,6 +42,18 @@ func (slf *RPCClient) Initial() {
 	slf.RegisterMethod(&responseEvent{}, slf.onResponse)
 }
 
+//Shutdown doc
+//@Summary Close RPC Client
+func (slf *RPCClient) Shutdown() {
+	close(slf._responseStop)
+	close(slf._response)
+	slf.NetConnector.Shutdown()
+	slf._parent = nil
+	slf._serial = 0
+	slf._responseWait = 0
+	slf._auth = 0
+}
+
 //Connection doc
 //@Summary Connection address
 //@Method  Connection
