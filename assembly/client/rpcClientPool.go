@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/yamakiller/magicNet/handler"
@@ -120,46 +121,15 @@ func New(options ...Option) (*RPCClientPool, error) {
 	}
 
 	var err error
+	var cc *RPCClient
+	var newid int64
 	for i := 0; i < c._opts.Idle; i++ {
-		c._ids++
-		cc := handler.Spawn(fmt.Sprintf("RPC/Client/%s/%d", c._opts.Addr, i+1), func() handler.IService {
-
-			rpc := &RPCClient{}
-
-			l, e := connector.Spawn(
-				connector.SetSocket(&net.TCPConnection{}),
-				connector.SetReceiveDecoder(rpc.rpcDecode),
-				connector.SetReceiveBuffer(buffer.New(c._opts.BufferLimit)),
-				connector.SetReceiveOutChanSize(c._opts.OutChanSize),
-				connector.SetAsyncClosed(c.closePool),
-				connector.SetUID(c._ids))
-
-			if e != nil {
-				err = e
-				return nil
-			}
-
-			rpc._parent = c
-			rpc._timeOut = c._opts.Timeout
-			rpc._connTimeout = c._opts.SocketTimeout
-
-			rpc.NetConnector = *l
-
-			rpc.Initial()
-
-			return rpc
-		}).(*RPCClient)
-
-		if cc == nil {
-			goto fail
-		}
-
-		err = cc.Connection(c._opts.Addr)
+		newid, cc, err = c.netClient()
 		if err != nil {
 			goto fail
 		}
 
-		c._cs = append(c._cs, &rpcHandle{_id: c._ids, _c: cc})
+		c._cs = append(c._cs, &rpcHandle{_id: newid, _c: cc})
 		c._sz++
 	}
 
@@ -198,9 +168,9 @@ type RPCClientPool struct {
 //@Param   string  method name
 //@Param   interface param
 func (slf *RPCClientPool) Call(method string, param interface{}) error {
-	h := slf.getPool()
-	if h == nil {
-		return code.ErrConnectPoolUp
+	h, err := slf.getPool()
+	if err != nil {
+		return err
 	}
 	defer slf.putPool(h)
 
@@ -209,10 +179,11 @@ func (slf *RPCClientPool) Call(method string, param interface{}) error {
 
 //CallWait doc
 func (slf *RPCClientPool) CallWait(method string, param interface{}) (interface{}, error) {
-	h := slf.getPool()
-	if h == nil {
-		return nil, code.ErrConnectPoolUp
+	h, err := slf.getPool()
+	if err != nil {
+		return nil, err
 	}
+
 	defer slf.putPool(h)
 
 	return h._c.CallWait(method, param)
@@ -222,7 +193,6 @@ func (slf *RPCClientPool) CallWait(method string, param interface{}) (interface{
 func (slf *RPCClientPool) Shutdown() {
 	slf._isShutdown = true
 	slf._wait.Wait()
-
 	for {
 		slf._sync.Lock()
 		if len(slf._cs) <= 0 {
@@ -235,7 +205,6 @@ func (slf *RPCClientPool) Shutdown() {
 		slf._sync.Unlock()
 		v._c.Shutdown()
 	}
-
 	for {
 		slf._sync.Lock()
 		if len(slf._cgc) <= 0 {
@@ -252,23 +221,79 @@ func (slf *RPCClientPool) Shutdown() {
 	slf._sync.Lock()
 }
 
-//TODO：优化pool管理
-func (slf *RPCClientPool) getPool() *rpcHandle {
+func (slf *RPCClientPool) netClient() (int64, *RPCClient, error) {
+	var err error
+	newid := atomic.AddInt64(&slf._ids, 1)
+	cc := handler.Spawn(fmt.Sprintf("RPC/Client/%s/%d", slf._opts.Addr, newid), func() handler.IService {
+
+		rpc := &RPCClient{}
+
+		l, e := connector.Spawn(
+			connector.SetSocket(&net.TCPConnection{}),
+			connector.SetReceiveDecoder(rpc.rpcDecode),
+			connector.SetReceiveBuffer(buffer.New(slf._opts.BufferLimit)),
+			connector.SetReceiveOutChanSize(slf._opts.OutChanSize),
+			connector.SetAsyncClosed(slf.closePool),
+			connector.SetUID(slf._ids))
+
+		if e != nil {
+			err = e
+			return nil
+		}
+
+		rpc._parent = slf
+		rpc._timeOut = slf._opts.Timeout
+		rpc._connTimeout = slf._opts.SocketTimeout
+		rpc._idletime = (time.Now().UnixNano() / int64(time.Millisecond))
+
+		rpc.NetConnector = *l
+
+		rpc.Initial()
+
+		return rpc
+	}).(*RPCClient)
+
+	if cc == nil {
+		return 0, nil, err
+	}
+
+	err = cc.Connection(slf._opts.Addr)
+	if err != nil {
+		cc.Shutdown()
+		return 0, nil, err
+	}
+
+	return newid, cc, nil
+}
+
+//getPool Return Client
+func (slf *RPCClientPool) getPool() (*rpcHandle, error) {
 	slf._sync.Lock()
-	defer slf._sync.Unlock()
 
 	if len(slf._cs) == 0 {
-		return nil
+		if slf._sz < slf._opts.Active {
+			newid, c, err := slf.netClient()
+			if err != nil {
+				slf._sync.Unlock()
+				return nil, err
+			}
+
+			slf._sz++
+			slf._sync.Unlock()
+			return &rpcHandle{_id: newid, _c: c}, nil
+		}
+		slf._sync.Unlock()
+		return nil, code.ErrConnectNoAvailable
 	}
 
 	c := slf._cs[0]
 	slf._cs = slf._cs[1:]
-
-	return c
+	slf._sync.Unlock()
+	return c, nil
 }
 
 func (slf *RPCClientPool) putPool(h *rpcHandle) {
-	h._c._idletime = time.Now().UnixNano()
+	h._c._idletime = (time.Now().UnixNano() / int64(time.Millisecond))
 
 	slf._sync.Lock()
 	defer slf._sync.Unlock()
@@ -291,10 +316,8 @@ func (slf *RPCClientPool) closePool(handle int64) {
 
 	for idx, v := range slf._cs {
 		if v._id == handle {
-			i := idx + 1
-			slf._cs = append(slf._cs[:i], slf._cs[i+1:]...)
+			slf.removeClient(idx)
 			slf._cgc = append(slf._cgc, v)
-			slf._sz--
 			break
 		}
 	}
@@ -311,10 +334,33 @@ func (slf *RPCClientPool) guard() {
 			v._c.Shutdown()
 			slf._sync.Lock()
 		}
+
+		startTime := (time.Now().UnixNano() / int64(time.Millisecond))
+		if slf._opts.Active > slf._opts.Idle && slf._sz > slf._opts.Idle {
+			for k, v := range slf._cs {
+				if (v._c._idletime - startTime) > slf._opts.IdleTimeout {
+					slf.removeClient(k)
+					slf._cgc = append(slf._cgc, v)
+					break
+				}
+			}
+		}
 		slf._sync.Unlock()
-		//关闭空闲连接
-		time.Sleep(time.Duration(350) * time.Millisecond)
+
+		time.Sleep(time.Duration(500) * time.Millisecond)
 	}
+}
+
+func (slf *RPCClientPool) removeClient(idx int) {
+	i := idx + 1
+	if i == 1 {
+		slf._cs = slf._cs[i:]
+	} else if i == len(slf._cs) {
+		slf._cs = slf._cs[:i-1]
+	} else {
+		slf._cs = append(slf._cs[:i-1], slf._cs[i:]...)
+	}
+	slf._sz--
 }
 
 func (slf *RPCClientPool) getRPC(name string) interface{} {
