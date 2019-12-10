@@ -26,19 +26,18 @@ type testFunc struct {
 }
 
 func (slf *testFunc) A() {
-	fmt.Println("Remote Call A")
+	logger.Info(0, "Remote Call A")
 }
 
 func (slf *testEngine) InitService() error {
 	addr := "0.0.0.0:8888"
-
 	rpcSrv, err := server.New(server.SetName("testRpc"))
 	if err != nil {
 		return errors.New("创建RPC服务失败")
 	}
 
 	if err := rpcSrv.Listen(addr); err != nil {
-		fmt.Println("")
+		fmt.Println(err)
 		return errors.New("监听RPC失败")
 	}
 
@@ -49,7 +48,7 @@ func (slf *testEngine) InitService() error {
 
 	logger.Info(0, "RPC开始创建Client")
 	//启动客户端
-	rpcCli, err := client.New(client.SetAddr("192.168.1.100:8888"))
+	rpcCli, err := client.New(client.SetAddr("127.0.0.1:8888"))
 	if err != nil && rpcCli != nil {
 		return fmt.Errorf("创建RPC Client Fail%+v", err)
 	}
