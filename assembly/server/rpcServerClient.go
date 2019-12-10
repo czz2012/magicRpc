@@ -46,17 +46,19 @@ func (slf *RPCSrvClient) GetID() uint64 {
 
 //Call doc
 func (slf *RPCSrvClient) Call(method string, param interface{}) error {
-	data, err := proto.Marshal(param.(proto.Message))
-	if err != nil {
-		return err
+	var data []byte
+	var err error
+	var dataName string
+	if param != nil {
+		data, err = proto.Marshal(param.(proto.Message))
+		if err != nil {
+			return err
+		}
+		dataName = proto.MessageName(param.(proto.Message))
 	}
 
-	data = codec.Encode(1, method, 0, codec.RPCRequest, proto.MessageName(param.(proto.Message)), data)
-	if err := slf.SendTo(data); err != nil {
-		return err
-	}
-
-	return nil
+	data = codec.Encode(1, method, 0, codec.RPCRequest, dataName, data)
+	return slf.SendTo(data)
 }
 
 /*

@@ -195,6 +195,22 @@ func (slf *RPCServer) Shutdown() {
 	slf._rpcs = nil
 }
 
+//Call doc
+//@Summary RPC Call the function of the specified connection
+//@Method Call
+//@Param uint64  connection id
+//@Param  string remote method
+//@Param  interface{} remote method param
+func (slf *RPCServer) Call(handle uint64, method string, param interface{}) error {
+	c := slf._listen.Grap(handle)
+	if c == nil {
+		return code.ErrConnectNon
+	}
+
+	defer slf._listen.Release(c)
+	return c.(*RPCSrvClient).Call(method, param)
+}
+
 func (slf *RPCServer) rpcClosed(id uint64) error {
 	if slf._asyncClosed != nil {
 		slf._asyncClosed(id)
