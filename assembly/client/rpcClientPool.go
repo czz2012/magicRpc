@@ -217,7 +217,7 @@ func (slf *RPCClientPool) Shutdown() {
 		slf._sync.Unlock()
 		v._c.Shutdown()
 	}
-
+	slf._rpcs = nil
 	slf._sync.Lock()
 }
 

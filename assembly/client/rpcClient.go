@@ -3,7 +3,6 @@ package client
 import (
 	"errors"
 	"fmt"
-	"reflect"
 	"sync/atomic"
 	"time"
 
@@ -12,9 +11,7 @@ import (
 	"github.com/yamakiller/magicNet/handler/implement/connector"
 	"github.com/yamakiller/magicNet/handler/net"
 	"github.com/yamakiller/magicNet/timer"
-	"github.com/yamakiller/magicRpc/assembly/codec"
 	"github.com/yamakiller/magicRpc/assembly/common"
-	"github.com/yamakiller/magicRpc/code"
 )
 
 //RPCClient doc
@@ -26,7 +23,7 @@ type RPCClient struct {
 	_timeOut      int64
 	_idletime     int64
 	_serial       uint32
-	_response     chan *responseEvent
+	_response     chan *common.ResponseEvent
 	_responseStop chan bool
 	_responseWait uint32
 }
@@ -35,11 +32,11 @@ type RPCClient struct {
 //@Summary Initial RPC Client service initial
 //@Method Initial
 func (slf *RPCClient) Initial() {
-	slf._response = make(chan *responseEvent)
+	slf._response = make(chan *common.ResponseEvent)
 	slf._responseStop = make(chan bool, 1)
 	slf.NetConnector.Initial()
-	slf.RegisterMethod(&requestEvent{}, slf.onRequest)
-	slf.RegisterMethod(&responseEvent{}, slf.onResponse)
+	slf.RegisterMethod(&common.RequestEvent{}, slf.onRequest)
+	slf.RegisterMethod(&common.ResponseEvent{}, slf.onResponse)
 }
 
 //Shutdown doc
@@ -95,18 +92,10 @@ func (slf *RPCClient) Connection(addr string) error {
 //@Param   interface{}  	param
 //@Return  error
 func (slf *RPCClient) Call(method string, param interface{}) error {
-	var data []byte
-	var err error
-	var dataName string
-	if param != nil {
-		data, err = proto.Marshal(param.(proto.Message))
-		if err != nil {
-			return err
-		}
-		dataName = proto.MessageName(param.(proto.Message))
+	data, err := common.Call(method, param)
+	if err != nil {
+		return err
 	}
-
-	data = codec.Encode(1, method, 0, codec.RPCRequest, dataName, data)
 	return slf.SendTo(data)
 }
 
@@ -127,7 +116,7 @@ func (slf *RPCClient) CallWait(method string, param interface{}) (interface{}, e
 	}
 
 	slf._responseWait = slf.incSerial()
-	data = codec.Encode(1, method, slf._responseWait, codec.RPCRequest, proto.MessageName(param.(proto.Message)), data)
+	data = common.Encode(1, method, slf._responseWait, common.RPCRequest, proto.MessageName(param.(proto.Message)), data)
 	if err := slf.SendTo(data); err != nil {
 		slf._responseWait = 0
 		return nil, err
@@ -141,8 +130,8 @@ func (slf *RPCClient) CallWait(method string, param interface{}) (interface{}, e
 				return nil, errors.New("client close")
 			}
 		case result := <-slf._response:
-			if atomic.CompareAndSwapUint32(&slf._responseWait, result._ser, 0) {
-				return result._return, nil
+			if atomic.CompareAndSwapUint32(&slf._responseWait, result.Ser, 0) {
+				return result.Return, nil
 			}
 
 			continue
@@ -154,36 +143,15 @@ func (slf *RPCClient) CallWait(method string, param interface{}) (interface{}, e
 }
 
 func (slf *RPCClient) onRequest(context actor.Context, sender *actor.PID, message interface{}) {
-	request := message.(*requestEvent)
-	methodName := common.MethodSplit(request._methodName)
-	method := reflect.ValueOf(request._method).MethodByName(methodName[1])
-	var params []reflect.Value
-	if request._param != nil {
-		params := make([]reflect.Value, 1)
-		params[0] = reflect.ValueOf(request._param)
-	}
-
-	rs := method.Call(params)
-	if len(rs) > 0 {
-		msgPb := rs[0].Interface().(proto.Message)
-		data, err := proto.Marshal(msgPb)
-		if err != nil {
-			slf.LogError("RPC Response error:%s  =>  %d[%+v]", request._method, request._ser, err)
-			return
-		}
-
-		data = codec.Encode(1, request._methodName, request._ser, codec.RPCResponse, proto.MessageName(msgPb), data)
-		if err := slf.SendTo(data); err != nil {
-			slf.LogError("RPC Response error:%s  => %d[%+v]", request._method, request._ser, err)
-		}
+	if err := common.RPCRequestProcess(context, slf.SendTo, message); err != nil {
+		slf.LogError("%s", err)
 		return
 	}
-	return
 }
 
 func (slf *RPCClient) onResponse(context actor.Context, sender *actor.PID, message interface{}) {
-	response := message.(*responseEvent)
-	if slf._responseWait != response._ser {
+	response := message.(*common.ResponseEvent)
+	if slf._responseWait != response.Ser {
 		slf.LogError("RPC Response error not request wait")
 		return
 	}
@@ -203,52 +171,18 @@ func (slf *RPCClient) rpcDecode(context actor.Context, params ...interface{}) er
 	c := params[0].(*connector.NetConnector)
 	if slf._auth == 0 {
 		tmpAuth := c.ReadBuffer(1)
-		if tmpAuth[0] != codec.ConstHandShakeCode {
+		if tmpAuth[0] != common.ConstHandShakeCode {
 			return errors.New("rpc connection unauthorized")
 		}
 		slf._auth = timer.Now()
 	}
 
-	block, err := codec.Decode(c)
+	data, err := common.RPCDecodeClient(slf._parent.getRPC, c)
 	if err != nil {
-		if err == code.ErrIncompleteData {
-			return net.ErrAnalysisProceed
-		}
 		return err
 	}
 
-	var methodName []string
-	var methodObj interface{}
-	if block.Oper == codec.RPCRequest {
-		methodName = common.MethodSplit(block.Method)
-		methodObj = slf._parent.getRPC(methodName[0])
-		if methodObj == nil || len(methodName) != 2 {
-			return code.ErrMethodUndefined
-		}
-
-		if !reflect.ValueOf(methodObj).MethodByName(methodName[1]).IsValid() {
-			return code.ErrMethodUndefined
-		}
-	}
-
-	var data proto.Message
-	if block.DName != "" {
-		dt := proto.MessageType(block.DName)
-		if dt == nil {
-			return code.ErrParamUndefined
-		}
-
-		data = reflect.New(dt.Elem()).Interface().(proto.Message)
-		if err := proto.Unmarshal(block.Data, data); err != nil {
-			return err
-		}
-	}
-
-	if block.Oper == codec.RPCRequest {
-		actor.DefaultSchedulerContext.Send(context.Self(), &requestEvent{block.Method, methodObj, data, block.Ser})
-	} else {
-		actor.DefaultSchedulerContext.Send(context.Self(), &responseEvent{block.Method, data, block.Ser})
-	}
+	actor.DefaultSchedulerContext.Send(context.Self(), data)
 
 	return net.ErrAnalysisSuccess
 }

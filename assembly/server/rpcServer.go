@@ -4,12 +4,10 @@ import (
 	"errors"
 	"reflect"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/yamakiller/magicNet/engine/actor"
 	"github.com/yamakiller/magicNet/handler"
 	"github.com/yamakiller/magicNet/handler/implement/listener"
 	"github.com/yamakiller/magicNet/handler/net"
-	"github.com/yamakiller/magicRpc/assembly/codec"
 	"github.com/yamakiller/magicRpc/assembly/common"
 	"github.com/yamakiller/magicRpc/code"
 )
@@ -220,7 +218,7 @@ func (slf *RPCServer) rpcClosed(id uint64) error {
 
 func (slf *RPCServer) rpcAccept(c net.INetClient) error {
 	x := make([]byte, 1)
-	x[0] = codec.ConstHandShakeCode
+	x[0] = common.ConstHandShakeCode
 	if err := c.(*RPCSrvClient).SendTo(x); err != nil {
 		return err
 	}
@@ -231,40 +229,14 @@ func (slf *RPCServer) rpcAccept(c net.INetClient) error {
 	return nil
 }
 
-func (slf *RPCServer) rpcDecode(ontext actor.Context, params ...interface{}) error {
+func (slf *RPCServer) rpcDecode(context actor.Context, params ...interface{}) error {
 	c := params[1].(net.INetClient)
-	block, err := codec.Decode(c)
+	data, err := common.RPCDecodeServer(slf.getRPC, c)
 	if err != nil {
-		if err == code.ErrIncompleteData {
-			return net.ErrAnalysisProceed
-		}
 		return err
 	}
 
-	methodName := common.MethodSplit(block.Method)
-	methodObj := slf.getRPC(methodName[0])
-	if methodObj == nil || len(methodName) != 2 {
-		return code.ErrMethodUndefined
-	}
-
-	if !reflect.ValueOf(methodObj).MethodByName(methodName[1]).IsValid() {
-		return code.ErrMethodUndefined
-	}
-
-	var data proto.Message
-	if block.DName != "" {
-		dt := proto.MessageType(block.DName)
-		if dt == nil {
-			return code.ErrParamUndefined
-		}
-
-		data = reflect.New(dt.Elem()).Interface().(proto.Message)
-		if err := proto.Unmarshal(block.Data, data); err != nil {
-			return err
-		}
-	}
-
-	actor.DefaultSchedulerContext.Send((c.(*RPCSrvClient)).GetPID(), &requestEvent{block.Method, methodObj, data, block.Ser})
+	actor.DefaultSchedulerContext.Send((c.(*RPCSrvClient)).GetPID(), data)
 	return net.ErrAnalysisSuccess
 }
 

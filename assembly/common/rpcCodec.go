@@ -1,4 +1,4 @@
-package codec
+package common
 
 import (
 	"encoding/binary"
@@ -66,7 +66,9 @@ const (
 )
 
 const (
-	//rpc handshake code
+	//ConstVersion rpc agee version code
+	ConstVersion = 1
+	//ConstHandShakeCode rpc handshake code
 	ConstHandShakeCode = 0xBF
 )
 
@@ -91,12 +93,12 @@ const (
 //@Member int       param  data length
 //@Member uint32    call serial of number
 type Block struct {
-	Ver    int
-	Oper   RPCOper
-	Method string
-	Ser    uint32
-	DName  string
-	Data   []byte
+	Ver      int
+	Oper     RPCOper
+	Method   string
+	Ser      uint32
+	DataName string
+	Data     []byte
 }
 
 func getVersion(d uint64) int {
@@ -160,11 +162,11 @@ func Decode(data net.INetReceiveBuffer) (*Block, error) {
 	data.TrunBuffer(constHeadByte)
 
 	result := &Block{Ver: getVersion(tmpHeader),
-		Oper:   RPCOper(getOper(tmpHeader)),
-		Method: string(data.ReadBuffer(tmpMethodNameLength)),
-		DName:  string(data.ReadBuffer(tmpDataNameLength)),
-		Ser:    getSerial(tmpHeader),
-		Data:   data.ReadBuffer(tmpDataLength)}
+		Oper:     RPCOper(getOper(tmpHeader)),
+		Method:   string(data.ReadBuffer(tmpMethodNameLength)),
+		DataName: string(data.ReadBuffer(tmpDataNameLength)),
+		Ser:      getSerial(tmpHeader),
+		Data:     data.ReadBuffer(tmpDataLength)}
 
 	return result, nil
 }

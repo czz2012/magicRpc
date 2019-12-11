@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/yamakiller/magicNet/engine/actor"
+
 	"github.com/yamakiller/magicLibs/logger"
 	"github.com/yamakiller/magicNet/core"
 	"github.com/yamakiller/magicNet/core/boot"
@@ -25,8 +27,8 @@ type testEngine struct {
 type testFunc struct {
 }
 
-func (slf *testFunc) A() {
-	logger.Info(0, "Remote Call A")
+func (slf *testFunc) A(context actor.Context) {
+	logger.Info(context.Self().ID, "Remote Call A")
 }
 
 func (slf *testEngine) InitService() error {

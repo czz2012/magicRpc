@@ -1,12 +1,8 @@
 package server
 
 import (
-	"reflect"
-
-	"github.com/gogo/protobuf/proto"
 	"github.com/yamakiller/magicNet/engine/actor"
 	"github.com/yamakiller/magicNet/handler/implement/client"
-	"github.com/yamakiller/magicRpc/assembly/codec"
 	"github.com/yamakiller/magicRpc/assembly/common"
 )
 
@@ -25,7 +21,7 @@ type RPCSrvClient struct {
 //@Method Initial
 func (slf *RPCSrvClient) Initial() {
 	slf.NetSSrvCleint.Initial()
-	slf.RegisterMethod(&requestEvent{}, slf.onRequest)
+	slf.RegisterMethod(&common.RequestEvent{}, slf.onRequest)
 }
 
 //SetID doc
@@ -46,96 +42,16 @@ func (slf *RPCSrvClient) GetID() uint64 {
 
 //Call doc
 func (slf *RPCSrvClient) Call(method string, param interface{}) error {
-	var data []byte
-	var err error
-	var dataName string
-	if param != nil {
-		data, err = proto.Marshal(param.(proto.Message))
-		if err != nil {
-			return err
-		}
-		dataName = proto.MessageName(param.(proto.Message))
+	data, err := common.Call(method, param)
+	if err != nil {
+		return err
 	}
-
-	data = codec.Encode(1, method, 0, codec.RPCRequest, dataName, data)
 	return slf.SendTo(data)
 }
 
-/*
-//CallWait doc 需要增加超时操作
-func (slf *RPCSrvClient) CallWait(method string, param interface{}) (interface{}, error) {
-	if slf._responseWait {
-		return nil, errors.New("call waitting")
-	}
-	data, err := proto.Marshal(param.(proto.Message))
-	if err != nil {
-		return nil, err
-	}
-
-	slf._responseWait = true
-	data = codec.Encode(1, method, 0, codec.RPCRequest, proto.MessageName(param.(proto.Message)), data)
-	if err := slf.SendTo(data); err != nil {
-		slf._responseWait = false
-		return nil, err
-	}
-
-	for {
-		select {
-		case isStop := <-slf._responseStop:
-			if isStop {
-				slf._responseWait = false
-				return nil, errors.New("client close")
-			}
-		case result := <-slf._response:
-			slf._responseWait = false
-			return result, nil
-		}
-	}
-}
-*/
-
 func (slf *RPCSrvClient) onRequest(context actor.Context, sender *actor.PID, message interface{}) {
-	request := message.(*requestEvent)
-	methodName := common.MethodSplit(request._methodName)
-	method := reflect.ValueOf(request._method).MethodByName(methodName[1])
-	var params []reflect.Value
-	if request._param != nil {
-		params = make([]reflect.Value, 1)
-		params[0] = reflect.ValueOf(request._param)
-	}
-
-	rs := method.Call(params)
-	if len(rs) > 0 {
-		msgPb := rs[0].Interface().(proto.Message)
-		data, err := proto.Marshal(msgPb)
-		if err != nil {
-			slf.LogError("RPC Response error:%s  =>  %d[%+v]", request._method, request._ser, err)
-			return
-		}
-
-		data = codec.Encode(1, request._methodName, request._ser, codec.RPCResponse, proto.MessageName(msgPb), data)
-		if err := slf.SendTo(data); err != nil {
-			slf.LogError("RPC Response error:%s  => %d[%+v]", request._method, request._ser, err)
-		}
+	if err := common.RPCRequestProcess(context, slf.SendTo, message); err != nil {
+		slf.LogError("%s", err)
 		return
 	}
-	return
 }
-
-/*func (slf *RPCSrvClient) onResponse(context actor.Context, sender *actor.PID, message interface{}) {
-	response := message.(*responseEvent)
-	if !slf._responseWait {
-		slf.LogError("RPC Response error not request wait")
-		return
-	}
-
-	select {
-	case isStop := <-slf._responseStop:
-		if isStop {
-			slf._responseWait = false
-			slf.LogError("client closed")
-			return
-		}
-	case slf._response <- response._return:
-	}
-}*/
