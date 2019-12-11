@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/yamakiller/magicNet/engine/actor"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/yamakiller/magicNet/core/frame"
 	"github.com/yamakiller/magicRpc/assembly/client"
 	"github.com/yamakiller/magicRpc/assembly/server"
+	"github.com/yamakiller/magicRpc/examples/helloworld"
 )
 
 type testEngine struct {
@@ -27,8 +29,9 @@ type testEngine struct {
 type testFunc struct {
 }
 
-func (slf *testFunc) A(context actor.Context) {
-	logger.Info(context.Self().ID, "Remote Call A")
+func (slf *testFunc) A(context actor.Context, request *helloworld.HelloRequest) *helloworld.HelloReply {
+	logger.Info(context.Self().ID, "Remote Call A Request:%s", request.Name)
+	return &helloworld.HelloReply{Name: "test"}
 }
 
 func (slf *testEngine) InitService() error {
@@ -57,9 +60,13 @@ func (slf *testEngine) InitService() error {
 
 	slf._rpcClient = rpcCli
 
-	rpcCli.Call("testFunc.A", nil)
+	r, err := rpcCli.CallWait("testFunc.A", &helloworld.HelloRequest{Name: "request - 1"})
+	if err != nil {
+		logger.Error(0, "RPC调用失败:%+v", err)
+		return nil
+	}
 
-	logger.Info(0, "RPC调用成功")
+	logger.Info(0, "RPC调用成功%+v", r)
 
 	return nil
 }
@@ -74,6 +81,22 @@ func (slf *testEngine) CloseService() {
 		slf._rpcServer.Shutdown()
 		slf._rpcServer = nil
 	}
+}
+
+func (slf *testEngine) testClosed() {
+	d := time.Duration(time.Second * 2)
+
+	t := time.NewTicker(d)
+	go func() {
+		defer t.Stop()
+		for {
+			<-t.C
+			slf._rpcClient.Shutdown()
+			slf._rpcClient = nil
+			fmt.Println("timeout...")
+			break
+		}
+	}()
 }
 
 func TestRPCServer(t *testing.T) {
