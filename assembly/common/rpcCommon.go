@@ -34,7 +34,7 @@ func Call(method string, param interface{}) ([]byte, error) {
 		dataName = proto.MessageName(param.(proto.Message))
 	}
 
-	data = Encode(1, method, 0, RPCRequest, dataName, data)
+	data = Encode(ConstVersion, method, 0, RPCRequest, dataName, data)
 
 	return data, nil
 }
@@ -49,13 +49,16 @@ func rpcDecode(rpcGet GetRPCMethod, bf net.INetReceiveBuffer) (*Block, interface
 	}
 
 	methodName := methodSplit(block.Method)
-	methodObj := rpcGet(methodName[0])
-	if methodObj == nil || len(methodName) != 2 {
-		return nil, nil, nil, code.ErrMethodUndefined
-	}
+	var mObj interface{}
+	if block.Oper == RPCRequest {
+		mObj = rpcGet(methodName[0])
+		if mObj == nil || len(methodName) != 2 {
+			return nil, nil, nil, code.ErrMethodUndefined
+		}
 
-	if !reflect.ValueOf(methodObj).MethodByName(methodName[1]).IsValid() {
-		return nil, nil, nil, code.ErrMethodUndefined
+		if !reflect.ValueOf(mObj).MethodByName(methodName[1]).IsValid() {
+			return nil, nil, nil, code.ErrMethodUndefined
+		}
 	}
 
 	var data proto.Message
@@ -70,29 +73,29 @@ func rpcDecode(rpcGet GetRPCMethod, bf net.INetReceiveBuffer) (*Block, interface
 			return nil, nil, nil, err
 		}
 	}
-	return block, methodObj, data, nil
+	return block, mObj, data, nil
 }
 
 //RPCDecodeServer RPC Server decode
 func RPCDecodeServer(rpcGet GetRPCMethod, bf net.INetReceiveBuffer) (interface{}, error) {
-	block, methodObj, data, err := rpcDecode(rpcGet, bf)
+	block, mObj, data, err := rpcDecode(rpcGet, bf)
 	if err != nil {
 		return nil, err
 	}
 
-	return &RequestEvent{block.Method, methodObj, data, block.Ser}, nil
+	return &RequestEvent{block.Method, mObj, data, block.Ser}, nil
 }
 
 //RPCDecodeClient RPC Client decode
 func RPCDecodeClient(rpcGet GetRPCMethod, bf net.INetReceiveBuffer) (interface{}, error) {
-	block, methodObj, data, err := rpcDecode(rpcGet, bf)
+	block, mObj, data, err := rpcDecode(rpcGet, bf)
 	if err != nil {
 		return nil, err
 	}
 
 	var result interface{}
 	if block.Oper == RPCRequest {
-		result = &RequestEvent{block.Method, methodObj, data, block.Ser}
+		result = &RequestEvent{block.Method, mObj, data, block.Ser}
 	} else {
 		result = &ResponseEvent{block.Method, data, block.Ser}
 	}
@@ -127,7 +130,7 @@ func RPCRequestProcess(context actor.Context, sendto func([]byte) error, message
 			return fmt.Errorf("RPC Response error:%s  =>  %d[%+v]", request.Method, request.Ser, err)
 		}
 
-		data = Encode(1, request.MethodName, request.Ser, RPCResponse, proto.MessageName(msgPb), data)
+		data = Encode(ConstVersion, request.MethodName, request.Ser, RPCResponse, proto.MessageName(msgPb), data)
 		if err := sendto(data); err != nil {
 			return fmt.Errorf("RPC Response error:%s  => %d[%+v]", request.Method, request.Ser, err)
 		}
