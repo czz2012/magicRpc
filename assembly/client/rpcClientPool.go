@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/yamakiller/magicNet/handler"
 	"github.com/yamakiller/magicNet/handler/implement/buffer"
 	"github.com/yamakiller/magicNet/handler/implement/connector"
@@ -40,7 +41,7 @@ type Options struct {
 type Option func(*Options) error
 
 var (
-	defaultOptions = Options{BufferLimit: 8196, OutChanSize: 32, Timeout: 1000 * 1000, SocketTimeout: 1000 * 60, Idle: 1, Active: 1, IdleTimeout: 1000 * 120}
+	defaultOptions = Options{BufferLimit: 8196, OutChanSize: 32, Timeout: 1000 * 1000, SocketTimeout: 1000 * 60, Idle: 2, Active: 2, IdleTimeout: 1000 * 120}
 )
 
 // SetAddr Set Socket Handle
@@ -167,26 +168,32 @@ type RPCClientPool struct {
 //@Summary Call Remote function non-return
 //@Param   string  method name
 //@Param   interface param
-func (slf *RPCClientPool) Call(method string, param interface{}) error {
+func (slf *RPCClientPool) Call(method string, param proto.Message, ret proto.Message) error {
+	var r proto.Message
 	h, err := slf.getPool()
 	if err != nil {
 		return err
 	}
-	defer slf.putPool(h)
 
-	return h._client.Call(method, param)
-}
-
-//CallWait doc
-func (slf *RPCClientPool) CallWait(method string, param interface{}) (interface{}, error) {
-	h, err := slf.getPool()
-	if err != nil {
-		return nil, err
+	if ret == nil {
+		err = h._client.call(method, param)
+	} else {
+		r, err = h._client.callr(method, param)
 	}
 
-	defer slf.putPool(h)
+	if err != nil {
+		if err == code.ErrConnectClosed {
+			return err
+		}
+		slf.putPool(h)
+		return err
+	}
+	slf.putPool(h)
+	if ret != nil {
+		reflect.ValueOf(ret).Elem().Set(reflect.ValueOf(r).Elem())
+	}
 
-	return h._client.CallWait(method, param)
+	return nil
 }
 
 //Shutdown shutdown Client pools
@@ -304,6 +311,21 @@ func (slf *RPCClientPool) putPool(h *rpcHandle) {
 		return
 	}
 	h._ref--
+	if slf._sz > 1 {
+		for k := slf._sz - 1; k >= 0; k-- {
+			if slf._cs[k]._id == h._id {
+				if k > 0 {
+					v := slf._cs[k]
+					slf.removeClient(k)
+					slf._cs = append([]*rpcHandle{v}, slf._cs...)
+					slf._sz++
+				}
+				break
+			}
+		}
+
+	}
+
 	h._status = constClientIdle
 }
 
