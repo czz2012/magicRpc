@@ -2,7 +2,7 @@ package client
 
 import (
 	"errors"
-	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -12,6 +12,12 @@ import (
 	"github.com/yamakiller/magicNet/handler/net"
 	"github.com/yamakiller/magicNet/timer"
 	"github.com/yamakiller/magicRpc/assembly/common"
+)
+
+const (
+	constClientIdle = 0
+	constClientRun  = 1
+	constClientDel  = 2
 )
 
 //RPCClient doc
@@ -26,6 +32,7 @@ type RPCClient struct {
 	_response     chan *common.ResponseEvent
 	_responseStop chan bool
 	_responseWait uint32
+	_closeWait    sync.WaitGroup
 }
 
 //Initial doc
@@ -33,7 +40,7 @@ type RPCClient struct {
 //@Method Initial
 func (slf *RPCClient) Initial() {
 	slf._response = make(chan *common.ResponseEvent)
-	slf._responseStop = make(chan bool, 1)
+	slf._responseStop = make(chan bool)
 	slf.NetConnector.Initial()
 	slf.RegisterMethod(&common.RequestEvent{}, slf.onRequest)
 	slf.RegisterMethod(&common.ResponseEvent{}, slf.onResponse)
@@ -43,6 +50,7 @@ func (slf *RPCClient) Initial() {
 //@Summary Close RPC Client
 func (slf *RPCClient) Shutdown() {
 	close(slf._responseStop)
+	slf._closeWait.Wait()
 	close(slf._response)
 	slf.NetConnector.Shutdown()
 	slf._parent = nil
@@ -71,7 +79,6 @@ func (slf *RPCClient) Connection(addr string) error {
 		if slf._connTimeout > 0 {
 			currTime := time.Now().UnixNano() - startTime
 			if (currTime / int64(time.Millisecond)) > slf._connTimeout {
-				fmt.Println("time out")
 				slf.Shutdown()
 				return errors.New("RPC Connection time out")
 			}
@@ -96,6 +103,7 @@ func (slf *RPCClient) Call(method string, param interface{}) error {
 	if err != nil {
 		return err
 	}
+
 	return slf.SendTo(data)
 }
 
@@ -116,19 +124,19 @@ func (slf *RPCClient) CallWait(method string, param interface{}) (interface{}, e
 	}
 
 	slf._responseWait = slf.incSerial()
-	data = common.Encode(1, method, slf._responseWait, common.RPCRequest, proto.MessageName(param.(proto.Message)), data)
+	data = common.Encode(common.ConstVersion, method, slf._responseWait, common.RPCRequest, proto.MessageName(param.(proto.Message)), data)
 	if err := slf.SendTo(data); err != nil {
 		slf._responseWait = 0
 		return nil, err
 	}
 
+	slf._closeWait.Add(1)
+	defer slf._closeWait.Done()
 	for {
 		select {
-		case isStop := <-slf._responseStop:
-			if isStop {
-				atomic.StoreUint32(&slf._responseWait, 0)
-				return nil, errors.New("client close")
-			}
+		case <-slf._responseStop:
+			atomic.StoreUint32(&slf._responseWait, 0)
+			return nil, errors.New("client closed")
 		case result := <-slf._response:
 			if atomic.CompareAndSwapUint32(&slf._responseWait, result.Ser, 0) {
 				return result.Return, nil
@@ -156,13 +164,14 @@ func (slf *RPCClient) onResponse(context actor.Context, sender *actor.PID, messa
 		return
 	}
 
+	slf._closeWait.Add(1)
+	defer slf._closeWait.Done()
+
 	select {
-	case isStop := <-slf._responseStop:
-		if isStop {
-			atomic.StoreUint32(&slf._responseWait, 0)
-			slf.LogError("client closed")
-			return
-		}
+	case <-slf._responseStop:
+		atomic.StoreUint32(&slf._responseWait, 0)
+		slf.LogError("client closed")
+		return
 	case slf._response <- response:
 	}
 }
