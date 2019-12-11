@@ -12,6 +12,7 @@ import (
 	"github.com/yamakiller/magicNet/handler/net"
 	"github.com/yamakiller/magicNet/timer"
 	"github.com/yamakiller/magicRpc/assembly/common"
+	"github.com/yamakiller/magicRpc/code"
 )
 
 const (
@@ -98,34 +99,30 @@ func (slf *RPCClient) Connection(addr string) error {
 //@Param   string  			method
 //@Param   interface{}  	param
 //@Return  error
-func (slf *RPCClient) Call(method string, param interface{}) error {
+func (slf *RPCClient) call(method string, param proto.Message) error {
 	data, err := common.Call(method, param)
 	if err != nil {
 		return err
 	}
-
 	return slf.SendTo(data)
+
 }
 
-//CallWait doc
-//@Summary Call wait remote function
-//@Param   string 	 	method
-//@Param   interface{}  param
-//@Return  interface{}
-//@Return  error
-func (slf *RPCClient) CallWait(method string, param interface{}) (interface{}, error) {
+func (slf *RPCClient) callr(method string, param proto.Message) (proto.Message, error) {
+	var data []byte
+	var err error
 	if slf._responseWait != 0 {
 		return nil, errors.New("call waitting")
 	}
-
-	data, err := proto.Marshal(param.(proto.Message))
-	if err != nil {
-		return nil, err
+	if param != nil {
+		data, err = proto.Marshal(param)
+		if err != nil {
+			return nil, err
+		}
 	}
-
 	slf._responseWait = slf.incSerial()
-	data = common.Encode(common.ConstVersion, method, slf._responseWait, common.RPCRequest, proto.MessageName(param.(proto.Message)), data)
-	if err := slf.SendTo(data); err != nil {
+	data = common.Encode(common.ConstVersion, method, slf._responseWait, common.RPCRequest, proto.MessageName(param), data)
+	if err = slf.SendTo(data); err != nil {
 		slf._responseWait = 0
 		return nil, err
 	}
@@ -136,7 +133,7 @@ func (slf *RPCClient) CallWait(method string, param interface{}) (interface{}, e
 		select {
 		case <-slf._responseStop:
 			atomic.StoreUint32(&slf._responseWait, 0)
-			return nil, errors.New("client closed")
+			return nil, code.ErrConnectClosed
 		case result := <-slf._response:
 			if atomic.CompareAndSwapUint32(&slf._responseWait, result.Ser, 0) {
 				return result.Return, nil
@@ -145,7 +142,7 @@ func (slf *RPCClient) CallWait(method string, param interface{}) (interface{}, e
 			continue
 		case <-time.After(time.Duration(slf._timeOut) * time.Millisecond):
 			atomic.StoreUint32(&slf._responseWait, 0)
-			return nil, errors.New("time out")
+			return nil, code.ErrTimeOut
 		}
 	}
 }

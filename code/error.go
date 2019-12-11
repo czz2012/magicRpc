@@ -17,8 +17,12 @@ var (
 	ErrParamUndefined = errors.New("RPC param undefined")
 	//ErrConnectNoAvailable error
 	ErrConnectNoAvailable = errors.New("No connection available")
+	//ErrConnectClosed	error
+	ErrConnectClosed = errors.New("RPC Connection closed")
 	//ErrConnectNon error
 	ErrConnectNon = errors.New("Connection does not exist")
 	//ErrConnectFull error
 	ErrConnectFull = errors.New("Connection is full")
+	//ErrTimeOut error
+	ErrTimeOut = errors.New("Time out")
 )

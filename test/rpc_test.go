@@ -59,19 +59,28 @@ func (slf *testEngine) InitService() error {
 	}
 
 	slf._rpcClient = rpcCli
-
-	r, err := rpcCli.CallWait("testFunc.A", &helloworld.HelloRequest{Name: "request - 1"})
+	r := &helloworld.HelloReply{}
+	err = rpcCli.Call("testFunc.A", &helloworld.HelloRequest{Name: "request - 1"}, r)
 	if err != nil {
 		logger.Error(0, "RPC调用失败:%+v", err)
 		return nil
 	}
 
-	logger.Info(0, "RPC调用成功%+v", r)
+	logger.Info(0, "1.RPC调用成功%+v,%p", r, r)
+
+	err = rpcCli.Call("testFunc.A", &helloworld.HelloRequest{Name: "request - 1"}, r)
+
+	logger.Info(0, "2.RPC调用成功%+v,%p", r, r)
+
+	err = rpcCli.Call("testFunc.A", &helloworld.HelloRequest{Name: "request - 1"}, r)
+
+	logger.Info(0, "3.RPC调用成功%+v,%p", r, r)
 
 	return nil
 }
 
 func (slf *testEngine) CloseService() {
+	logger.Info(0, "close service start")
 	if slf._rpcClient != nil {
 		slf._rpcClient.Shutdown()
 		slf._rpcClient = nil
@@ -81,6 +90,7 @@ func (slf *testEngine) CloseService() {
 		slf._rpcServer.Shutdown()
 		slf._rpcServer = nil
 	}
+	logger.Info(0, "close service complate")
 }
 
 func (slf *testEngine) testClosed() {
