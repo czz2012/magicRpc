@@ -2,7 +2,7 @@ package common
 
 import "github.com/gogo/protobuf/proto"
 
-//requestEvent doc
+//RequestEvent doc
 //@Summary RPC Request event
 //@Member string Request method name
 //@Member interface{} Request method object
