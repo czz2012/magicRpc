@@ -200,6 +200,7 @@ func Encode(ver int, methodName string, ser uint32, oper RPCOper, dataName strin
 
 	tmpData = append(tmpData, []byte(methodName)...)
 	if data != nil {
+		tmpData = append(tmpData, []byte(dataName)...)
 		tmpData = append(tmpData, data...)
 	}
 
