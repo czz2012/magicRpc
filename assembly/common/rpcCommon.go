@@ -39,7 +39,8 @@ func Call(method string, param interface{}) ([]byte, error) {
 	return data, nil
 }
 
-func rpcDecode(rpcGet GetRPCMethod, bf net.INetReceiveBuffer) (*Block, interface{}, proto.Message, error) {
+func rpcDecode(rpcGet GetRPCMethod,
+	bf net.INetReceiveBuffer) (*Block, interface{}, proto.Message, error) {
 	block, err := Decode(bf)
 	if err != nil {
 		if err == code.ErrIncompleteData {
@@ -77,7 +78,8 @@ func rpcDecode(rpcGet GetRPCMethod, bf net.INetReceiveBuffer) (*Block, interface
 }
 
 //RPCDecodeServer RPC Server decode
-func RPCDecodeServer(rpcGet GetRPCMethod, bf net.INetReceiveBuffer) (interface{}, error) {
+func RPCDecodeServer(rpcGet GetRPCMethod,
+	bf net.INetReceiveBuffer) (interface{}, error) {
 	block, mObj, data, err := rpcDecode(rpcGet, bf)
 	if err != nil {
 		return nil, err
@@ -87,7 +89,8 @@ func RPCDecodeServer(rpcGet GetRPCMethod, bf net.INetReceiveBuffer) (interface{}
 }
 
 //RPCDecodeClient RPC Client decode
-func RPCDecodeClient(rpcGet GetRPCMethod, bf net.INetReceiveBuffer) (interface{}, error) {
+func RPCDecodeClient(rpcGet GetRPCMethod,
+	bf net.INetReceiveBuffer) (interface{}, error) {
 	block, mObj, data, err := rpcDecode(rpcGet, bf)
 	if err != nil {
 		return nil, err
@@ -108,7 +111,10 @@ func RPCDecodeClient(rpcGet GetRPCMethod, bf net.INetReceiveBuffer) (interface{}
 //@Param  *event.RequestEvent
 //@Return []byte
 //@Return error
-func RPCRequestProcess(context actor.Context, sendto func([]byte) error, message interface{}) error {
+func RPCRequestProcess(context actor.Context,
+	sendto func([]byte) error,
+	message interface{}) error {
+
 	request := message.(*RequestEvent)
 	methodName := methodSplit(request.MethodName)
 	method := reflect.ValueOf(request.Method).MethodByName(methodName[1])
