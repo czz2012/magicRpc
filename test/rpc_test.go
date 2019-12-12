@@ -6,17 +6,25 @@ import (
 	"testing"
 	"time"
 
+	"github.com/yamakiller/magicNet/core"
 	"github.com/yamakiller/magicNet/engine/actor"
 
 	"github.com/yamakiller/magicLibs/logger"
 	"github.com/yamakiller/magicLibs/util"
-	"github.com/yamakiller/magicNet/core"
 	"github.com/yamakiller/magicNet/core/boot"
 	"github.com/yamakiller/magicNet/core/frame"
 	"github.com/yamakiller/magicRpc/assembly/client"
 	"github.com/yamakiller/magicRpc/assembly/server"
 	"github.com/yamakiller/magicRpc/examples/helloworld"
 )
+
+type testFunc struct {
+}
+
+func (slf *testFunc) A(context actor.Context, request *helloworld.HelloRequest) *helloworld.HelloReply {
+	logger.Info(context.Self().ID, "Remote Call A Request:%s", request.Name)
+	return &helloworld.HelloReply{Name: "test"}
+}
 
 type testEngine struct {
 	core.DefaultBoot
@@ -25,14 +33,6 @@ type testEngine struct {
 
 	_rpcServer *server.RPCServer
 	_rpcClient *client.RPCClientPool
-}
-
-type testFunc struct {
-}
-
-func (slf *testFunc) A(context actor.Context, request *helloworld.HelloRequest) *helloworld.HelloReply {
-	logger.Info(context.Self().ID, "Remote Call A Request:%s", request.Name)
-	return &helloworld.HelloReply{Name: "test"}
 }
 
 func (slf *testEngine) InitService() error {
@@ -54,7 +54,9 @@ func (slf *testEngine) InitService() error {
 
 	logger.Info(0, "RPC开始创建Client")
 	//启动客户端
-	rpcCli, err := client.New(client.SetAddr("127.0.0.1:8888"))
+	rpcCli, err := client.New(client.SetAddr("127.0.0.1:8888"),
+		client.SetTimeout(1))
+
 	if err != nil && rpcCli != nil {
 		return fmt.Errorf("创建RPC Client Fail%+v", err)
 	}
@@ -69,13 +71,13 @@ func (slf *testEngine) InitService() error {
 
 	logger.Info(0, "1.RPC调用成功%+v,%p", r, r)
 
-	err = rpcCli.Call("testFunc.A", &helloworld.HelloRequest{Name: "request - 1"}, r)
+	//err = rpcCli.Call("testFunc.A", &helloworld.HelloRequest{Name: "request - 1"}, r)
 
-	logger.Info(0, "2.RPC调用成功%+v,%p", r, r)
+	//logger.Info(0, "2.RPC调用成功%+v,%p", r, r)
 
-	err = rpcCli.Call("testFunc.A", &helloworld.HelloRequest{Name: "request - 1"}, r)
+	//err = rpcCli.Call("testFunc.A", &helloworld.HelloRequest{Name: "request - 1"}, r)
 
-	logger.Info(0, "3.RPC调用成功%+v,%p", r, r)
+	//logger.Info(0, "3.RPC调用成功%+v,%p", r, r)
 	logger.Info(0, "%s", util.SpawnUUID())
 
 	return nil
