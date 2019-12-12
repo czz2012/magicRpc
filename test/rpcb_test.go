@@ -2,6 +2,7 @@ package test
 
 import (
 	"fmt"
+	"math/rand"
 	"sync"
 	"testing"
 	"time"
@@ -24,7 +25,7 @@ import (
 type testBFunc struct {
 }
 
-func (slf *testBFunc) a(context actor.Context,
+func (slf *testBFunc) Atest(context actor.Context,
 	request *helloworld.HelloRequest) *helloworld.HelloReply {
 
 	return &helloworld.HelloReply{Name: "test"}
@@ -75,6 +76,7 @@ func (slf *testBEngine) InitService() error {
 	logger.Info(0, "开启客户端")
 	clientNum := 40
 	slf._shutdown = false
+	rand.Seed(time.Now().Unix())
 	slf._wait.Add(clientNum)
 	for i := 0; i < clientNum; i++ {
 		go slf.testCall(i + 1)
@@ -104,20 +106,22 @@ func (slf *testBEngine) CloseService() {
 func (slf *testBEngine) testCall(n int) {
 	defer slf._wait.Done()
 	var err error
+
+	
 	name := fmt.Sprintf("request - %d", n)
 	r := &helloworld.HelloReply{}
 	for {
 		if slf._shutdown {
 			break
 		}
-		err = slf._cli.Call("testBFunc.a",
+		err = slf._cli.Call("testBFunc.Atest",
 			&helloworld.HelloRequest{Name: name},
 			r)
 		if err != nil {
-			fmt.Printf("调用函数testBFunc.a错误:%+v\n", err)
-			break
+			fmt.Printf("调用函数testBFunc.Atest错误:%+v\n", err)
 		}
-		time.Sleep(time.Duration(150) * time.Millisecond)
+		sleep:= rand.Intn(200)
+		time.Sleep(time.Duration(sleep) * time.Millisecond)
 	}
 }
 
