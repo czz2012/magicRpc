@@ -105,7 +105,6 @@ func (slf *RPCClient) call(method string, param proto.Message) error {
 		return err
 	}
 	return slf.SendTo(data)
-
 }
 
 func (slf *RPCClient) callr(method string, param proto.Message) (proto.Message, error) {
