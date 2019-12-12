@@ -170,9 +170,29 @@ type RPCClientPool struct {
 //@Param   interface param
 func (slf *RPCClientPool) Call(method string, param proto.Message, ret proto.Message) error {
 	var r proto.Message
-	h, err := slf.getPool()
-	if err != nil {
-		return err
+	var h *rpcHandle
+	var err error
+	ick := 0
+	startTime := time.Now().UnixNano()
+	for {
+		h, err = slf.getPool()
+		if err != nil {
+			if err != code.ErrConnectNoAvailable {
+				return err
+			}
+			ick++
+			if ick > 8 {
+				ick = 0
+				time.Sleep(time.Duration(100) * time.Millisecond)
+			}
+			currentTime := time.Now().UnixNano()
+			if (currentTime-startTime)/int64(time.Millisecond) >
+				slf._opts.SocketTimeout {
+				return code.ErrTimeOut
+			}
+			continue
+		}
+		break
 	}
 
 	if ret == nil {
@@ -200,10 +220,9 @@ func (slf *RPCClientPool) Call(method string, param proto.Message, ret proto.Mes
 func (slf *RPCClientPool) Shutdown() {
 	slf._isShutdown = true
 	slf._wait.Wait()
+	slf._sync.Lock()
 	for {
-		slf._sync.Lock()
 		if len(slf._cs) <= 0 {
-			slf._sync.Unlock()
 			break
 		}
 		v := slf._cs[0]
@@ -211,10 +230,11 @@ func (slf *RPCClientPool) Shutdown() {
 		slf._sz--
 		slf._sync.Unlock()
 		v._client.Shutdown()
+		slf._sync.Lock()
 	}
 
 	slf._rpcs = nil
-	slf._sync.Lock()
+	slf._sync.Unlock()
 }
 
 func (slf *RPCClientPool) netClient() (int64, *RPCClient, error) {
@@ -265,7 +285,6 @@ func (slf *RPCClientPool) netClient() (int64, *RPCClient, error) {
 //getPool Return Client
 func (slf *RPCClientPool) getPool() (*rpcHandle, error) {
 	slf._sync.Lock()
-
 	for idx, v := range slf._cs {
 		if v._status != constClientIdle {
 			continue
@@ -284,15 +303,18 @@ func (slf *RPCClientPool) getPool() (*rpcHandle, error) {
 	}
 
 	if slf._sz < slf._opts.Active {
+		slf._sz++
+		slf._sync.Unlock()
 		newid, c, err := slf.netClient()
+		slf._sync.Lock()
 		if err != nil {
+			slf._sz--
 			slf._sync.Unlock()
 			return nil, err
 		}
 
 		h := &rpcHandle{_id: newid, _client: c, _ref: 2, _status: constClientRun}
 		slf._cs = append(slf._cs, h)
-		slf._sz++
 		slf._sync.Unlock()
 		return h, nil
 	}
@@ -305,14 +327,15 @@ func (slf *RPCClientPool) putPool(h *rpcHandle) {
 
 	slf._sync.Lock()
 	defer slf._sync.Unlock()
+
 	if !h._client.IsConnected() || h._status == constClientDel {
 		h._status = constClientDel
 		h._ref--
 		return
 	}
 	h._ref--
-	if slf._sz > 1 {
-		for k := slf._sz - 1; k >= 0; k-- {
+	if len(slf._cs) > 1 {
+		for k := len(slf._cs) - 1; k >= 0; k-- {
 			if slf._cs[k]._id == h._id {
 				if k > 0 {
 					v := slf._cs[k]
@@ -344,6 +367,7 @@ func (slf *RPCClientPool) closePool(handle int64) {
 				slf._cs = slf._cs[1:]
 				slf._cs = append(slf._cs, v)
 			}
+			v._client.closeStop()
 			break
 		}
 	}
@@ -351,13 +375,14 @@ func (slf *RPCClientPool) closePool(handle int64) {
 
 func (slf *RPCClientPool) guard() {
 	var rm []*rpcHandle
-	var client *rpcHandle
+	var client, v *rpcHandle
 	defer slf._wait.Done()
 	for !slf._isShutdown {
 		slf._sync.Lock()
 		startTime := (time.Now().UnixNano() / int64(time.Millisecond))
 		if slf._opts.Active > slf._opts.Idle && slf._sz > slf._opts.Idle {
-			for k, v := range slf._cs {
+			for k := 0; k < len(slf._cs); {
+				v = slf._cs[k]
 				if v._status == constClientDel && v._ref <= 1 {
 					slf.removeClient(k)
 					v._ref = 0
@@ -366,8 +391,9 @@ func (slf *RPCClientPool) guard() {
 				}
 
 				if (v._client._idletime - startTime) > slf._opts.IdleTimeout {
-					v._status = constClientDel
+					slf._cs[k]._status = constClientDel
 				}
+				k++
 			}
 		}
 		slf._sync.Unlock()
@@ -375,6 +401,7 @@ func (slf *RPCClientPool) guard() {
 		for len(rm) > 0 {
 			client = rm[0]
 			rm = rm[1:]
+			fmt.Println("Shutdown RPC Client")
 			client._client.Shutdown()
 		}
 

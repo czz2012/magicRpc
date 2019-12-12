@@ -24,22 +24,26 @@ const (
 //RPCClient doc
 type RPCClient struct {
 	connector.NetConnector
-	_parent       *RPCClientPool
-	_auth         uint64
-	_connTimeout  int64
-	_timeOut      int64
-	_idletime     int64
-	_serial       uint32
-	_response     chan *common.ResponseEvent
-	_responseStop chan bool
-	_responseWait uint32
-	_closeWait    sync.WaitGroup
+	_parent             *RPCClientPool
+	_auth               uint64
+	_connTimeout        int64
+	_timeOut            int64
+	_idletime           int64
+	_serial             uint32
+	_response           chan *common.ResponseEvent
+	_responseStop       chan bool
+	_responseStopClosed int32
+	_responseWait       uint32
+	_isClosed           int32
+	_closeWait          sync.WaitGroup
 }
 
 //Initial doc
 //@Summary Initial RPC Client service initial
 //@Method Initial
 func (slf *RPCClient) Initial() {
+	slf._isClosed = 0
+	slf._responseStopClosed = 0
 	slf._response = make(chan *common.ResponseEvent)
 	slf._responseStop = make(chan bool)
 	slf.NetConnector.Initial()
@@ -47,17 +51,25 @@ func (slf *RPCClient) Initial() {
 	slf.RegisterMethod(&common.ResponseEvent{}, slf.onResponse)
 }
 
+func (slf *RPCClient) closeStop() {
+	if atomic.CompareAndSwapInt32(&slf._responseStopClosed, 0, 1) {
+		close(slf._responseStop)
+	}
+}
+
 //Shutdown doc
 //@Summary Close RPC Client
 func (slf *RPCClient) Shutdown() {
-	close(slf._responseStop)
-	slf._closeWait.Wait()
-	close(slf._response)
-	slf.NetConnector.Shutdown()
-	slf._parent = nil
-	slf._serial = 0
-	slf._responseWait = 0
-	slf._auth = 0
+	if atomic.CompareAndSwapInt32(&slf._isClosed, 0, 1) {
+		slf.closeStop()
+		slf._closeWait.Wait()
+		close(slf._response)
+		slf.NetConnector.Shutdown()
+		slf._parent = nil
+		slf._serial = 0
+		slf._responseWait = 0
+		slf._auth = 0
+	}
 }
 
 //Connection doc
@@ -133,15 +145,15 @@ func (slf *RPCClient) callr(method string, param proto.Message) (proto.Message, 
 		case <-slf._responseStop:
 			atomic.StoreUint32(&slf._responseWait, 0)
 			return nil, code.ErrConnectClosed
+		case <-time.After(time.Duration(slf._timeOut) * time.Millisecond):
+			atomic.StoreUint32(&slf._responseWait, 0)
+			return nil, code.ErrTimeOut
 		case result := <-slf._response:
 			if atomic.CompareAndSwapUint32(&slf._responseWait, result.Ser, 0) {
 				return result.Return, nil
 			}
 
 			continue
-		case <-time.After(time.Duration(slf._timeOut) * time.Millisecond):
-			atomic.StoreUint32(&slf._responseWait, 0)
-			return nil, code.ErrTimeOut
 		}
 	}
 }
