@@ -9,6 +9,7 @@ import (
 	"github.com/yamakiller/magicNet/engine/actor"
 
 	"github.com/yamakiller/magicLibs/logger"
+	"github.com/yamakiller/magicLibs/util"
 	"github.com/yamakiller/magicNet/core"
 	"github.com/yamakiller/magicNet/core/boot"
 	"github.com/yamakiller/magicNet/core/frame"
@@ -75,6 +76,7 @@ func (slf *testEngine) InitService() error {
 	err = rpcCli.Call("testFunc.A", &helloworld.HelloRequest{Name: "request - 1"}, r)
 
 	logger.Info(0, "3.RPC调用成功%+v,%p", r, r)
+	logger.Info(0, "%s", util.SpawnUUID())
 
 	return nil
 }
