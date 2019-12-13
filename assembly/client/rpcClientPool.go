@@ -168,7 +168,7 @@ type RPCClientPool struct {
 //@Summary Call Remote function non-return
 //@Param   string  method name
 //@Param   interface param
-func (slf *RPCClientPool) Call(method string, param proto.Message, ret proto.Message) error {
+func (slf *RPCClientPool) Call(method string, param, ret interface{}) error {
 	var r proto.Message
 	var h *rpcHandle
 	var err error
@@ -196,9 +196,9 @@ func (slf *RPCClientPool) Call(method string, param proto.Message, ret proto.Mes
 	}
 
 	if ret == nil {
-		err = h._client.call(method, param)
+		err = h._client.call(method, param.(proto.Message))
 	} else {
-		r, err = h._client.callr(method, param)
+		r, err = h._client.callr(method, param.(proto.Message))
 	}
 
 	if err != nil {
