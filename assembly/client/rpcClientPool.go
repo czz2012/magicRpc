@@ -27,6 +27,7 @@ import (
 //@Method int    connection max of number
 //@Method int    connection idle time out
 type Options struct {
+	Name          string
 	Addr          string
 	BufferLimit   int
 	OutChanSize   int
@@ -41,10 +42,18 @@ type Options struct {
 type Option func(*Options) error
 
 var (
-	defaultOptions = Options{BufferLimit: 8196, OutChanSize: 32, Timeout: 1000 * 1000, SocketTimeout: 1000 * 60, Idle: 2, Active: 2, IdleTimeout: 1000 * 120}
+	defaultOptions = Options{Name: "RPC/Client", BufferLimit: 8196, OutChanSize: 32, Timeout: 1000 * 1000, SocketTimeout: 1000 * 60, Idle: 2, Active: 2, IdleTimeout: 1000 * 120}
 )
 
-// SetAddr Set Socket Handle
+// SetName Set RPC client pool name
+func SetName(name string) Option {
+	return func(o *Options) error {
+		o.Name = name
+		return nil
+	}
+}
+
+// SetAddr Set RPC client connection address
 func SetAddr(addr string) Option {
 	return func(o *Options) error {
 		o.Addr = addr
@@ -164,6 +173,13 @@ type RPCClientPool struct {
 	_sync       sync.Mutex
 }
 
+//GetName doc
+//@Summary Return rpc client pool name
+//@Return string name
+func (slf *RPCClientPool) GetName() string {
+	return slf._opts.Name
+}
+
 //Call doc
 //@Summary Call Remote function non-return
 //@Param   string  method name
@@ -240,7 +256,7 @@ func (slf *RPCClientPool) Shutdown() {
 func (slf *RPCClientPool) netClient() (int64, *RPCClient, error) {
 	var err error
 	newid := atomic.AddInt64(&slf._ids, 1)
-	cc := handler.Spawn(fmt.Sprintf("RPC/Client/%s/%d", slf._opts.Addr, newid), func() handler.IService {
+	cc := handler.Spawn(fmt.Sprintf("%s/%s/%d", slf._opts.Name, slf._opts.Addr, newid), func() handler.IService {
 
 		rpc := &RPCClient{}
 

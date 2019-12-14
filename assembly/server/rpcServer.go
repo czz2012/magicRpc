@@ -147,7 +147,7 @@ func New(options ...Option) (*RPCServer, error) {
 			listener.SetClientOutChanSize(opts.OutCChanSize),
 			listener.SetAsyncComplete(opts.AsyncComplete),
 			listener.SetAsyncAccept(rpc.rpcAccept),
-			listener.SetAsyncClose(rpc.rpcClosed),
+			listener.SetAsyncClosed(rpc.rpcClosed),
 			listener.SetClientGroups(group),
 			listener.SetClientDecoder(rpc.rpcDecode))
 
