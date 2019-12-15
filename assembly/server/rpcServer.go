@@ -21,9 +21,9 @@ type Options struct {
 	BufferLimit  int
 	OutCChanSize int
 
-	AsyncError    func(error)
-	AsyncComplete func(int32)
-	AsyncClosed   func(uint64)
+	AsyncError    listener.AsyncErrorFunc
+	AsyncComplete listener.AsyncCompleteFunc
+	AsyncClosed   listener.AsyncClosedFunc
 	AsyncAccept   func(uint64)
 }
 
@@ -79,7 +79,7 @@ func SetClientOutSize(outSize int) Option {
 }
 
 //SetAsyncError Set Listen fail Async Error callback option
-func SetAsyncError(f func(error)) Option {
+func SetAsyncError(f listener.AsyncErrorFunc) Option {
 	return func(o *Options) error {
 		o.AsyncError = f
 		return nil
@@ -95,7 +95,7 @@ func SetAsyncAccept(f func(uint64)) Option {
 }
 
 //SetAsyncComplete Set Listen async success callback option
-func SetAsyncComplete(f func(int32)) Option {
+func SetAsyncComplete(f listener.AsyncCompleteFunc) Option {
 	return func(o *Options) error {
 		o.AsyncComplete = f
 		return nil
@@ -103,7 +103,7 @@ func SetAsyncComplete(f func(int32)) Option {
 }
 
 //SetAsyncClosed Set Listen closed async callback
-func SetAsyncClosed(f func(uint64)) Option {
+func SetAsyncClosed(f listener.AsyncClosedFunc) Option {
 	return func(o *Options) error {
 		o.AsyncClosed = f
 		return nil
@@ -171,7 +171,7 @@ type RPCServer struct {
 	_listen      *listener.NetListener
 	_rpcs        map[string]interface{}
 	_asyncAccept func(uint64)
-	_asyncClosed func(uint64)
+	_asyncClosed listener.AsyncClosedFunc
 }
 
 //Listen doc
@@ -211,7 +211,7 @@ func (slf *RPCServer) Call(handle uint64, method string, param interface{}) erro
 
 func (slf *RPCServer) rpcClosed(id uint64) error {
 	if slf._asyncClosed != nil {
-		slf._asyncClosed(id)
+		return slf._asyncClosed(id)
 	}
 	return nil
 }
@@ -233,6 +233,9 @@ func (slf *RPCServer) rpcDecode(context actor.Context, params ...interface{}) er
 	c := params[1].(net.INetClient)
 	data, err := common.RPCDecodeServer(slf.getRPC, c)
 	if err != nil {
+		if err == code.ErrIncompleteData {
+			return net.ErrAnalysisProceed
+		}
 		return err
 	}
 

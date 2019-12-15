@@ -34,7 +34,7 @@ func (slf *RPCSrvClientAllocer) Initial() {
 	slf._pool = &sync.Pool{
 		New: func() interface{} {
 			c := new(RPCSrvClient)
-			c.ReceiveBuffer = buffer.New(slf._parent._bfSize)
+			c.ReceiveBuffer = buffer.NewBuffer(slf._parent._bfSize)
 			return c
 		},
 	}

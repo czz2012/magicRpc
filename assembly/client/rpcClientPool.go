@@ -263,7 +263,7 @@ func (slf *RPCClientPool) netClient() (int64, *RPCClient, error) {
 		l, e := connector.Spawn(
 			connector.SetSocket(&net.TCPConnection{}),
 			connector.SetReceiveDecoder(rpc.rpcDecode),
-			connector.SetReceiveBuffer(buffer.New(slf._opts.BufferLimit)),
+			connector.SetReceiveBuffer(buffer.NewBuffer(slf._opts.BufferLimit)),
 			connector.SetReceiveOutChanSize(slf._opts.OutChanSize),
 			connector.SetAsyncClosed(slf.closePool),
 			connector.SetUID(slf._ids))
