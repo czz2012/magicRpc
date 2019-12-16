@@ -17,10 +17,9 @@ const (
 )
 
 //RPCSrvClientAllocer doc
-//@Summary RPC 访问者分配器
-//@Struct RPCSrvClient
-//@Member _parent *RPCSrvGroup 分配器所属父及管理器对象
-//@Member _pool *sync.Pool 内存池
+//@Summary RPC  Visitor Allocator
+//@Member _parent *RPCSrvGroup Allocator parent and manager objects
+//@Member _pool *sync.Pool Memory pool
 type RPCSrvClientAllocer struct {
 	_parent *RPCSrvGroup
 	_pool   *sync.Pool
@@ -28,13 +27,12 @@ type RPCSrvClientAllocer struct {
 }
 
 //Initial doc
-//@Summary 初始化分配器
-//@Method Initial
+//@Summary Initialize the allocator
 func (slf *RPCSrvClientAllocer) Initial() {
 	slf._pool = &sync.Pool{
 		New: func() interface{} {
 			c := new(RPCSrvClient)
-			c.ReceiveBuffer = buffer.NewBuffer(slf._parent._bfSize)
+			c.ReceiveBuffer = buffer.NewRing(slf._parent._bfSize)
 			return c
 		},
 	}
@@ -42,8 +40,7 @@ func (slf *RPCSrvClientAllocer) Initial() {
 
 //New doc
 //@Summary Allocate a new RPC visitor object
-//@Method New
-//@Return net.INetClient 新的一个RPC访问者对象
+//@Return net.INetClient A new RPC visitor object
 func (slf *RPCSrvClientAllocer) New() net.INetClient {
 	c := handler.Spawn(fmt.Sprintf("rpc/client/%d/%d",
 		slf._parent._id,
@@ -59,9 +56,8 @@ func (slf *RPCSrvClientAllocer) New() net.INetClient {
 }
 
 //Delete doc
-//@Summary 释放一个RPC访问者对象
-//@Method Delete
-//@Param  p net.INetClient 需要释放的对象
+//@Summary Release an RPC visitor object
+//@Param  p net.INetClient The object that needs to be released
 func (slf *RPCSrvClientAllocer) Delete(p net.INetClient) {
 	p.Shutdown()
 	slf._pool.Put(p)
@@ -82,7 +78,6 @@ type RPCSrvGroup struct {
 
 //Initial doc
 //@Summary initialization rpc server client manage
-//@Method Initial
 func (slf *RPCSrvGroup) Initial() {
 	slf._handles = make(map[uint64]net.INetClient)
 	slf._sockets = make(map[int32]net.INetClient)
@@ -94,8 +89,7 @@ func (slf *RPCSrvGroup) Initial() {
 }
 
 //Allocer doc
-//@Summary Retruns 一个分配器
-//@Method Allocer
+//@Summary Retruns A distributor
 //@Return net.IAllocer
 func (slf *RPCSrvGroup) Allocer() net.IAllocer {
 	return slf._allocer
@@ -103,7 +97,6 @@ func (slf *RPCSrvGroup) Allocer() net.IAllocer {
 
 //Occupy doc
 //@Summary  occupy a client resouse
-//@Method Occupy
 //@Param (implement.INetClient) a client object
 //@Return (uint64) a resouse id
 //@Return (error) error informat
@@ -122,7 +115,7 @@ func (slf *RPCSrvGroup) Occupy(c net.INetClient) (uint64, error) {
 	slf._sockets[c.GetSocket()] = c
 
 	c.SetRef(2)
-	c.SetID(handleKey)
+	c.WithID(handleKey)
 	slf._sz++
 
 	return handleKey, nil
@@ -130,7 +123,6 @@ func (slf *RPCSrvGroup) Occupy(c net.INetClient) (uint64, error) {
 
 //Grap doc
 //@Summary return client and inc add 1
-//@Method Grap
 //@Param (uint64) a client (Handle/ID)
 //@Return (implement.INetClient) a client
 func (slf *RPCSrvGroup) Grap(h uint64) net.INetClient {
@@ -147,7 +139,6 @@ func (slf *RPCSrvGroup) Grap(h uint64) net.INetClient {
 
 //GrapSocket doc
 //@Summary return client and ref add 1
-//@Method GrapSocket desc
 //@Param (int32) a socket id
 //@Return (implement.INetClient) a client
 func (slf *RPCSrvGroup) GrapSocket(sock int32) net.INetClient {
@@ -164,7 +155,6 @@ func (slf *RPCSrvGroup) GrapSocket(sock int32) net.INetClient {
 
 //Erase doc
 //@Summary remove client
-//@Method Erase
 //@Param (uint64) a client is (Handle/ID)
 func (slf *RPCSrvGroup) Erase(h uint64) {
 	slf._sync.Lock()
@@ -192,7 +182,6 @@ func (slf *RPCSrvGroup) Erase(h uint64) {
 
 //Release doc
 //@Summary release client grap
-//@Method Release
 //@Param implement.INetClient a client
 func (slf *RPCSrvGroup) Release(c net.INetClient) {
 	slf._sync.Lock()
@@ -204,8 +193,7 @@ func (slf *RPCSrvGroup) Release(c net.INetClient) {
 }
 
 //Size doc
-//@Summary Return 连接客户端数
-//@Method Size
+//@Summary Return Number of connected clients
 //@Return int
 func (slf *RPCSrvGroup) Size() int {
 	slf._sync.Lock()
@@ -214,14 +202,13 @@ func (slf *RPCSrvGroup) Size() int {
 }
 
 //Cap doc
-//@Summary Returns 最大客户端连接数
+//@Summary Returns Maximum number of client connections
 func (slf *RPCSrvGroup) Cap() int {
 	return slf._cap
 }
 
 //GetHandles doc
-//@Summary Returns 所有连接中的客户端Handle/ID
-//@Method GetHandles
+//@Summary Returns Clients in all connections Handle/ID
 //@Return ([]uint64) all client of (Handle/ID)
 func (slf *RPCSrvGroup) GetHandles() []uint64 {
 	slf._sync.Lock()

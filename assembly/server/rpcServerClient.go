@@ -24,17 +24,15 @@ func (slf *RPCSrvClient) Initial() {
 	slf.RegisterMethod(&common.RequestEvent{}, slf.onRequest)
 }
 
-//SetID doc
+//WithID doc
 //@Summary Setting handle/id
-//@Method SetID
 //@Param uint64  handle/id
-func (slf *RPCSrvClient) SetID(id uint64) {
+func (slf *RPCSrvClient) WithID(id uint64) {
 	slf._handle = id
 }
 
 //GetID doc
 //@Summary Returns handle/id
-//@Method GetID
 //@Return uint64
 func (slf *RPCSrvClient) GetID() uint64 {
 	return slf._handle

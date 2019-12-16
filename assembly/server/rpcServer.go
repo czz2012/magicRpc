@@ -18,7 +18,7 @@ type Options struct {
 	ServerID     int
 	Cap          int
 	KeepTime     int
-	BufferLimit  int
+	BufferCap    int
 	OutCChanSize int
 
 	AsyncError    listener.AsyncErrorFunc
@@ -27,83 +27,83 @@ type Options struct {
 	AsyncAccept   func(uint64)
 }
 
-// Option is a function on the options for a rpc listen.
+//Option is a function on the options for a rpc listen.
 type Option func(*Options) error
 
-// SetName setting name option
-func SetName(name string) Option {
+//WithName setting name option
+func WithName(name string) Option {
 	return func(o *Options) error {
 		o.Name = name
 		return nil
 	}
 }
 
-// SetID setting id option
-func SetID(id int) Option {
+//WithID setting id option
+func WithID(id int) Option {
 	return func(o *Options) error {
 		o.ServerID = id
 		return nil
 	}
 }
 
-//SetClientCap Set accesser cap option
-func SetClientCap(cap int) Option {
+//WithClientCap Set accesser cap option
+func WithClientCap(cap int) Option {
 	return func(o *Options) error {
 		o.Cap = cap
 		return nil
 	}
 }
 
-//SetClientKeepTime Set client keep time millsecond option
-func SetClientKeepTime(tm int) Option {
+//WithClientKeepTime Set client keep time millsecond option
+func WithClientKeepTime(tm int) Option {
 	return func(o *Options) error {
 		o.KeepTime = tm
 		return nil
 	}
 }
 
-//SetClientBufferLimit Set client buffer limit option
-func SetClientBufferLimit(limit int) Option {
+//WithClientBufferCap Set client buffer limit option
+func WithClientBufferCap(cap int) Option {
 	return func(o *Options) error {
-		o.BufferLimit = limit
+		o.BufferCap = cap
 		return nil
 	}
 }
 
-//SetClientOutSize Set client recvice call chan size option
-func SetClientOutSize(outSize int) Option {
+//WithClientOutSize Set client recvice call chan size option
+func WithClientOutSize(outSize int) Option {
 	return func(o *Options) error {
 		o.OutCChanSize = outSize
 		return nil
 	}
 }
 
-//SetAsyncError Set Listen fail Async Error callback option
-func SetAsyncError(f listener.AsyncErrorFunc) Option {
+//WithAsyncError Set Listen fail Async Error callback option
+func WithAsyncError(f listener.AsyncErrorFunc) Option {
 	return func(o *Options) error {
 		o.AsyncError = f
 		return nil
 	}
 }
 
-//SetAsyncAccept Set Listen client accept Async callback
-func SetAsyncAccept(f func(uint64)) Option {
+//WithAsyncAccept Set Listen client accept Async callback
+func WithAsyncAccept(f func(uint64)) Option {
 	return func(o *Options) error {
 		o.AsyncAccept = f
 		return nil
 	}
 }
 
-//SetAsyncComplete Set Listen async success callback option
-func SetAsyncComplete(f listener.AsyncCompleteFunc) Option {
+//WithAsyncComplete Set Listen async success callback option
+func WithAsyncComplete(f listener.AsyncCompleteFunc) Option {
 	return func(o *Options) error {
 		o.AsyncComplete = f
 		return nil
 	}
 }
 
-//SetAsyncClosed Set Listen closed async callback
-func SetAsyncClosed(f listener.AsyncClosedFunc) Option {
+//WithAsyncClosed Set Listen closed async callback
+func WithAsyncClosed(f listener.AsyncClosedFunc) Option {
 	return func(o *Options) error {
 		o.AsyncClosed = f
 		return nil
@@ -114,7 +114,7 @@ var (
 	defaultOption = Options{Name: "rpc server",
 		ServerID:     1,
 		Cap:          1024,
-		BufferLimit:  8196,
+		BufferCap:    8196,
 		KeepTime:     1000 * 60,
 		OutCChanSize: 512,
 	}
@@ -122,7 +122,6 @@ var (
 
 //New doc
 //@Summary new a rpc server
-//@Method New
 //@Param ...Option
 //@Return *RPCServer
 //@Return error
@@ -138,18 +137,18 @@ func New(options ...Option) (*RPCServer, error) {
 	rpc._asyncAccept = opts.AsyncAccept
 	rpc._asyncClosed = opts.AsyncClosed
 	handler.Spawn(opts.Name, func() handler.IService {
-		group := &RPCSrvGroup{_id: opts.ServerID, _bfSize: opts.BufferLimit, _cap: opts.Cap}
+		group := &RPCSrvGroup{_id: opts.ServerID, _bfSize: opts.BufferCap, _cap: opts.Cap}
 
 		h, err := listener.Spawn(
-			listener.SetListener(&net.TCPListen{}),
-			listener.SetAsyncError(opts.AsyncError),
-			listener.SetClientKeepTime(opts.KeepTime),
-			listener.SetClientOutChanSize(opts.OutCChanSize),
-			listener.SetAsyncComplete(opts.AsyncComplete),
-			listener.SetAsyncAccept(rpc.rpcAccept),
-			listener.SetAsyncClosed(rpc.rpcClosed),
-			listener.SetClientGroups(group),
-			listener.SetClientDecoder(rpc.rpcDecode))
+			listener.WithListener(&net.TCPListen{}),
+			listener.WithAsyncError(opts.AsyncError),
+			listener.WithClientKeepTime(opts.KeepTime),
+			listener.WithClientOutChanSize(opts.OutCChanSize),
+			listener.WithAsyncComplete(opts.AsyncComplete),
+			listener.WithAsyncAccept(rpc.rpcAccept),
+			listener.WithAsyncClosed(rpc.rpcClosed),
+			listener.WithClientGroups(group),
+			listener.WithClientDecoder(rpc.rpcDecode))
 
 		if err != nil {
 			return nil
@@ -164,7 +163,6 @@ func New(options ...Option) (*RPCServer, error) {
 
 //RPCServer doc
 //@Summary RPC Server
-//@Struct RPCServer
 //@
 //@Member map[string]interface{}  RPC Function map table
 type RPCServer struct {
@@ -195,7 +193,6 @@ func (slf *RPCServer) Shutdown() {
 
 //Call doc
 //@Summary RPC Call the function of the specified connection
-//@Method Call
 //@Param uint64  connection id
 //@Param  string remote method
 //@Param  interface{} remote method param

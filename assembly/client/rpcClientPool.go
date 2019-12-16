@@ -29,7 +29,7 @@ import (
 type Options struct {
 	Name          string
 	Addr          string
-	BufferLimit   int
+	BufferCap     int
 	OutChanSize   int
 	SocketTimeout int64
 	Timeout       int64
@@ -42,75 +42,75 @@ type Options struct {
 type Option func(*Options) error
 
 var (
-	defaultOptions = Options{Name: "RPC/Client", BufferLimit: 8196, OutChanSize: 32, Timeout: 1000 * 1000, SocketTimeout: 1000 * 60, Idle: 2, Active: 2, IdleTimeout: 1000 * 120}
+	defaultOptions = Options{Name: "RPC/Client", BufferCap: 8196, OutChanSize: 32, Timeout: 1000 * 1000, SocketTimeout: 1000 * 60, Idle: 2, Active: 2, IdleTimeout: 1000 * 120}
 )
 
-// SetName Set RPC client pool name
-func SetName(name string) Option {
+// WithName Set RPC client pool name
+func WithName(name string) Option {
 	return func(o *Options) error {
 		o.Name = name
 		return nil
 	}
 }
 
-// SetAddr Set RPC client connection address
-func SetAddr(addr string) Option {
+// WithAddr Set RPC client connection address
+func WithAddr(addr string) Option {
 	return func(o *Options) error {
 		o.Addr = addr
 		return nil
 	}
 }
 
-//SetBufferLimit Set Connection Receive Buffer size
-func SetBufferLimit(limit int) Option {
+//WithBufferCap Set Connection Receive Buffer size
+func WithBufferCap(cap int) Option {
 	return func(o *Options) error {
-		o.BufferLimit = limit
+		o.BufferCap = cap
 		return nil
 	}
 }
 
-//SetTimeout Set Connection operation time out/millsecond
-func SetTimeout(tm int64) Option {
+//WithTimeout Set Connection operation time out/millsecond
+func WithTimeout(tm int64) Option {
 	return func(o *Options) error {
 		o.Timeout = tm
 		return nil
 	}
 }
 
-//SetSocketTimeout Set Connection connect time out/millsecond
-func SetSocketTimeout(tm int64) Option {
+//WithSocketTimeout Set Connection connect time out/millsecond
+func WithSocketTimeout(tm int64) Option {
 	return func(o *Options) error {
 		o.SocketTimeout = tm
 		return nil
 	}
 }
 
-//SetOutChanSize Set Connection receive chan size
-func SetOutChanSize(n int) Option {
+//WithOutChanSize Set Connection receive chan size
+func WithOutChanSize(n int) Option {
 	return func(o *Options) error {
 		o.OutChanSize = n
 		return nil
 	}
 }
 
-//SetIdle Set Connection pool idle max of number
-func SetIdle(n int) Option {
+//WithIdle Set Connection pool idle max of number
+func WithIdle(n int) Option {
 	return func(o *Options) error {
 		o.Idle = n
 		return nil
 	}
 }
 
-//SetActive Set Connection pool max of number
-func SetActive(n int) Option {
+//WithActive Set Connection pool max of number
+func WithActive(n int) Option {
 	return func(o *Options) error {
 		o.Active = n
 		return nil
 	}
 }
 
-//SetIdleTimeout Set Connection pool connection idle time out
-func SetIdleTimeout(tm int64) Option {
+//WithIdleTimeout Set Connection pool connection idle time out
+func WithIdleTimeout(tm int64) Option {
 	return func(o *Options) error {
 		o.IdleTimeout = tm
 		return nil
@@ -261,12 +261,12 @@ func (slf *RPCClientPool) netClient() (int64, *RPCClient, error) {
 		rpc := &RPCClient{}
 
 		l, e := connector.Spawn(
-			connector.SetSocket(&net.TCPConnection{}),
-			connector.SetReceiveDecoder(rpc.rpcDecode),
-			connector.SetReceiveBuffer(buffer.NewBuffer(slf._opts.BufferLimit)),
-			connector.SetReceiveOutChanSize(slf._opts.OutChanSize),
-			connector.SetAsyncClosed(slf.closePool),
-			connector.SetUID(slf._ids))
+			connector.WithSocket(&net.TCPConnection{}),
+			connector.WithReceiveDecoder(rpc.rpcDecode),
+			connector.WithReceiveBuffer(buffer.NewRing(slf._opts.BufferCap)),
+			connector.WithReceiveOutChanSize(slf._opts.OutChanSize),
+			connector.WithAsyncClosed(slf.closePool),
+			connector.WithUID(slf._ids))
 
 		if e != nil {
 			err = e
@@ -447,7 +447,6 @@ func (slf *RPCClientPool) getRPC(name string) interface{} {
 
 //RegRPC doc
 //@Summary Register RPC Accesser function
-//@Method RegRPC
 //@Param  string function name
 //@Param  interface{} function
 //@Return error
