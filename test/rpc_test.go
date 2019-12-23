@@ -7,22 +7,22 @@ import (
 	"time"
 
 	"github.com/yamakiller/magicNet/core"
-	"github.com/yamakiller/magicNet/engine/actor"
+	"github.com/yamakiller/magicNet/handler/net"
 
 	"github.com/yamakiller/magicLibs/logger"
 	"github.com/yamakiller/magicLibs/util"
 	"github.com/yamakiller/magicNet/core/boot"
 	"github.com/yamakiller/magicNet/core/frame"
 	"github.com/yamakiller/magicRpc/assembly/client"
-	"github.com/yamakiller/magicRpc/assembly/server"
+	rpcsrv "github.com/yamakiller/magicRpc/assembly/server"
 	"github.com/yamakiller/magicRpc/examples/helloworld"
 )
 
 type testFunc struct {
 }
 
-func (slf *testFunc) A(context actor.Context, request *helloworld.HelloRequest) *helloworld.HelloReply {
-	logger.Info(context.Self().ID, "Remote Call A Request:%s", request.Name)
+func (slf *testFunc) A(c net.INetClient, request *helloworld.HelloRequest) *helloworld.HelloReply {
+	c.(*rpcsrv.RPCSrvClient).LogInfo("Remote Call A Request:%s", request.Name)
 	return &helloworld.HelloReply{Name: "test"}
 }
 
@@ -31,13 +31,13 @@ type testEngine struct {
 	core.DefaultService
 	core.DefaultWait
 
-	_rpcServer *server.RPCServer
+	_rpcServer *rpcsrv.RPCServer
 	_rpcClient *client.RPCClientPool
 }
 
 func (slf *testEngine) InitService() error {
 	addr := "0.0.0.0:8888"
-	rpcSrv, err := server.New(server.SetName("testRpc"))
+	rpcSrv, err := rpcsrv.New(rpcsrv.WithName("testRpc"))
 	if err != nil {
 		return errors.New("创建RPC服务失败")
 	}
@@ -54,8 +54,8 @@ func (slf *testEngine) InitService() error {
 
 	logger.Info(0, "RPC开始创建Client")
 	//启动客户端
-	rpcCli, err := client.New(client.SetAddr("127.0.0.1:8888"),
-		client.SetTimeout(1))
+	rpcCli, err := client.New(client.WithAddr("127.0.0.1:8888"),
+		client.WithTimeout(1))
 
 	if err != nil && rpcCli != nil {
 		return fmt.Errorf("创建RPC Client Fail%+v", err)

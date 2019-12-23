@@ -48,7 +48,7 @@ func (slf *RPCSrvClient) Call(method string, param interface{}) error {
 }
 
 func (slf *RPCSrvClient) onRequest(context actor.Context, sender *actor.PID, message interface{}) {
-	if err := common.RPCRequestProcess(context, slf.SendTo, message); err != nil {
+	if err := common.RPCRequestProcess(slf, slf.SendTo, message); err != nil {
 		slf.LogError("%s", err)
 		return
 	}

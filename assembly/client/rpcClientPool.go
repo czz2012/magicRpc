@@ -27,15 +27,16 @@ import (
 //@Method int    connection max of number
 //@Method int    connection idle time out
 type Options struct {
-	Name          string
-	Addr          string
-	BufferCap     int
-	OutChanSize   int
-	SocketTimeout int64
-	Timeout       int64
-	Idle          int
-	Active        int
-	IdleTimeout   int64
+	Name           string
+	Addr           string
+	BufferCap      int
+	OutChanSize    int
+	SocketTimeout  int64
+	Timeout        int64
+	Idle           int
+	Active         int
+	IdleTimeout    int64
+	AsyncConnected func(c *RPCClient)
 }
 
 //Option param
@@ -113,6 +114,14 @@ func WithActive(n int) Option {
 func WithIdleTimeout(tm int64) Option {
 	return func(o *Options) error {
 		o.IdleTimeout = tm
+		return nil
+	}
+}
+
+//WithAsyncConnected Set Connected Callback function
+func WithAsyncConnected(f func(*RPCClient)) Option {
+	return func(o *Options) error {
+		o.AsyncConnected = f
 		return nil
 	}
 }
@@ -212,9 +221,9 @@ func (slf *RPCClientPool) Call(method string, param, ret interface{}) error {
 	}
 
 	if ret == nil {
-		err = h._client.call(method, param.(proto.Message))
+		err = h._client.Call(method, param.(proto.Message))
 	} else {
-		r, err = h._client.callr(method, param.(proto.Message))
+		r, err = h._client.CallReturn(method, param.(proto.Message))
 	}
 
 	if err != nil {
@@ -293,6 +302,10 @@ func (slf *RPCClientPool) netClient() (int64, *RPCClient, error) {
 	if err != nil {
 		cc.Shutdown()
 		return 0, nil, err
+	}
+
+	if slf._opts.AsyncConnected != nil {
+		slf._opts.AsyncConnected(cc)
 	}
 
 	return newid, cc, nil

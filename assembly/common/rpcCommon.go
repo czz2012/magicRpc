@@ -5,8 +5,6 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/yamakiller/magicNet/engine/actor"
-
 	"github.com/yamakiller/magicNet/handler/net"
 
 	"github.com/gogo/protobuf/proto"
@@ -111,7 +109,7 @@ func RPCDecodeClient(rpcGet GetRPCMethod,
 //@Param  *event.RequestEvent
 //@Return []byte
 //@Return error
-func RPCRequestProcess(context actor.Context,
+func RPCRequestProcess(c interface{},
 	sendto func([]byte) error,
 	message interface{}) error {
 
@@ -123,7 +121,7 @@ func RPCRequestProcess(context actor.Context,
 		paramNumber++
 	}
 	params := make([]reflect.Value, paramNumber)
-	params[0] = reflect.ValueOf(context)
+	params[0] = reflect.ValueOf(c)
 	if request.Param != nil {
 		params[1] = reflect.ValueOf(request.Param)
 	}

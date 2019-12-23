@@ -11,8 +11,8 @@ import (
 	"github.com/yamakiller/magicNet/core"
 	"github.com/yamakiller/magicNet/core/boot"
 	"github.com/yamakiller/magicNet/core/frame"
+	"github.com/yamakiller/magicNet/handler/net"
 
-	"github.com/yamakiller/magicNet/engine/actor"
 	"github.com/yamakiller/magicRpc/examples/helloworld"
 
 	rpcclient "github.com/yamakiller/magicRpc/assembly/client"
@@ -25,7 +25,7 @@ import (
 type testBFunc struct {
 }
 
-func (slf *testBFunc) Atest(context actor.Context,
+func (slf *testBFunc) Atest(c net.INetClient,
 	request *helloworld.HelloRequest) *helloworld.HelloReply {
 
 	return &helloworld.HelloReply{Name: "test"}
@@ -46,7 +46,7 @@ func (slf *testBEngine) InitService() error {
 	logger.Info(0, "启动压力测试")
 
 	srvAddr := "0.0.0.0:8888"
-	rpcSrv, err := rpcserver.New(rpcserver.SetName("testRPC"))
+	rpcSrv, err := rpcserver.New(rpcserver.WithName("testRPC"))
 	if err != nil {
 		return fmt.Errorf("创建RPC服务错误：%+v", err)
 	}
@@ -59,11 +59,11 @@ func (slf *testBEngine) InitService() error {
 	slf._srv.RegRPC(&testBFunc{})
 	logger.Info(0, "启动客户端连接池")
 	rpcCli, err := rpcclient.New(
-		rpcclient.SetAddr("127.0.0.1:8888"),
-		rpcclient.SetActive(128),
-		rpcclient.SetIdle(32),
-		rpcclient.SetTimeout(30*1000),
-		rpcclient.SetIdleTimeout(60*1000),
+		rpcclient.WithAddr("127.0.0.1:8888"),
+		rpcclient.WithActive(128),
+		rpcclient.WithIdle(32),
+		rpcclient.WithTimeout(30*1000),
+		rpcclient.WithIdleTimeout(60*1000),
 	)
 
 	if err != nil {
@@ -107,7 +107,6 @@ func (slf *testBEngine) testCall(n int) {
 	defer slf._wait.Done()
 	var err error
 
-	
 	name := fmt.Sprintf("request - %d", n)
 	r := &helloworld.HelloReply{}
 	for {
@@ -120,7 +119,7 @@ func (slf *testBEngine) testCall(n int) {
 		if err != nil {
 			fmt.Printf("调用函数testBFunc.Atest错误:%+v\n", err)
 		}
-		sleep:= rand.Intn(200)
+		sleep := rand.Intn(200)
 		time.Sleep(time.Duration(sleep) * time.Millisecond)
 	}
 }

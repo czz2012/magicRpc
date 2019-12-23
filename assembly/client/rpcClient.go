@@ -111,7 +111,7 @@ func (slf *RPCClient) Connection(addr string) error {
 //@Param   string  			method
 //@Param   interface{}  	param
 //@Return  error
-func (slf *RPCClient) call(method string, param proto.Message) error {
+func (slf *RPCClient) Call(method string, param proto.Message) error {
 	data, err := common.Call(method, param)
 	if err != nil {
 		return err
@@ -119,7 +119,13 @@ func (slf *RPCClient) call(method string, param proto.Message) error {
 	return slf.SendTo(data)
 }
 
-func (slf *RPCClient) callr(method string, param proto.Message) (proto.Message, error) {
+//CallReturn doc
+//@Summary Call remote function wait return
+//@Param   string  			method
+//@Param   interface{}  	param
+//@Return  proto.Message    return
+//@Return  error
+func (slf *RPCClient) CallReturn(method string, param proto.Message) (proto.Message, error) {
 	var data []byte
 	var err error
 	if slf._responseWait != 0 {
@@ -159,7 +165,7 @@ func (slf *RPCClient) callr(method string, param proto.Message) (proto.Message, 
 }
 
 func (slf *RPCClient) onRequest(context actor.Context, sender *actor.PID, message interface{}) {
-	if err := common.RPCRequestProcess(context, slf.SendTo, message); err != nil {
+	if err := common.RPCRequestProcess(slf, slf.SendTo, message); err != nil {
 		slf.LogError("%s", err)
 		return
 	}

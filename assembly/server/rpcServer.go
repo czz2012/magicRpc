@@ -4,6 +4,8 @@ import (
 	"errors"
 	"reflect"
 
+	"github.com/yamakiller/magicNet/network"
+
 	"github.com/yamakiller/magicNet/engine/actor"
 	"github.com/yamakiller/magicNet/handler"
 	"github.com/yamakiller/magicNet/handler/implement/listener"
@@ -178,6 +180,19 @@ type RPCServer struct {
 //@Return  error
 func (slf *RPCServer) Listen(addr string) error {
 	return slf._listen.Listen(addr)
+}
+
+//CloseClient doc
+//@Summary RPC Server close client
+//@Param client handle
+func (slf *RPCServer) CloseClient(handle uint64) {
+	c := slf._listen.Grap(handle)
+	if c == nil {
+		return
+	}
+
+	network.OperClose(c.GetSocket())
+	slf._listen.Release(c)
 }
 
 //Shutdown doc
