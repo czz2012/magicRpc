@@ -128,6 +128,7 @@ func RPCRequestProcess(c interface{},
 
 	rs := method.Call(params)
 	if len(rs) > 0 {
+
 		msgPb := rs[0].Interface().(proto.Message)
 		data, err := proto.Marshal(msgPb)
 		if err != nil {
